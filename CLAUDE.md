@@ -387,7 +387,7 @@ Every FK is `ON DELETE RESTRICT`. Nothing is ever hard-deleted.
 | GET | `/admin` (`?before=<uuid>`; keyset by id) | AdminPostController::index | admin |
 | GET/POST | `/admin/posts/new`, `/admin/posts` | AdminPostController::create/store | admin |
 | GET/POST | `/admin/posts/{id:uuid}/edit`, `/admin/posts/{id:uuid}` | edit/update | admin |
-| POST | `/admin/posts/{id:uuid}/delete` | destroy: **soft delete** (`status='deleted'`, cover file kept) | admin |
+| POST | `/admin/posts/{id:uuid}/delete` | destroy: **soft delete** (`status='deleted'`, `deleted_by`); then its cover and inline images that no live post uses are deleted from `public/uploads/` (003) | admin |
 | POST | `/admin/media` | AdminPostController::uploadMedia (JSON `{url, markdown}`; used by the editor's image upload) | admin |
 | POST | `/admin/preview` | AdminPostController::preview (field `body` → JSON `{ok, html}`, server CommonMark, not cached) | admin |
 
@@ -564,4 +564,12 @@ composer serve                       # php -S localhost:8000 -t public public/in
     - **DB:** `explain_query upload_in_use` is `range` on `idx_posts_status_published` (run through `DevTools` directly; the live MCP session was stale, so re-run it after `/mcp` reconnects). `verify_constraints` 15/15 and `verify_vote_counts` `[]`. On the real files the query marked 6 of 7 as in use and only the pre-003 orphan `e48a335f….jpg` as unused.
     - **End to end over HTTP as the admin:** replacing a cover deletes the old file; "Remove cover" deletes it and sets the cover to NULL; dropping an inline image from the body deletes it; an image still used by another live post is kept (and deleted when that last post is deleted); deleting a post removes its unused cover; the default cover and the other uploads were never touched. Test rows (`T003-…`) were removed afterwards, and the uploads folder was identical to before the test.
     - **Checkbox CSS** (headless Chrome, 1440 px: 6 checks, 390 px: 7 checks): a 20×20 native box on one line with its text, a 44 px label row, no horizontal scroll, the form keeps its 24 px margins on the phone, and a long editor line does not widen the page.
-  - **Not changed (outside §B9, left as is because this change set may edit §B9 only):** the §B5 row for `POST /admin/posts/{id}/delete` still says "cover file kept". It is now stale: the post's unused images are deleted. Fix that row the next time CLAUDE.md is edited.
+  - **Not changed (outside §B9, left as is because this change set may edit §B9 only):** the §B5 row for `POST /admin/posts/{id}/delete` still says "cover file kept". It is now stale: the post's unused images are deleted. *(Fixed in the post-003 review below.)*
+- 2026-11-21 (post-003 review, Opus):
+  - **MCP** (the inkwell-dev server over stdio, because the Claude session was stale): `explain_query upload_in_use` is `range` on `idx_posts_status_published` with 4 rows; `verify_constraints` 15/15; `verify_vote_counts` `[]`. Re-run through the reconnected Claude MCP session after `/mcp`: the same results, and `list_routes` shows all 19 routes, including `POST /admin/preview` (admin).
+  - **`acc:check-path-traversal`:** the only `unlink` in `src/` is `ImageUploader::delete`. Probes all left the files outside the upload folder, and any non-generated name, untouched: `../`, `%2e%2e`, a trailing newline, a NUL byte, `.php`, uppercase hex, `/assets/…`, and `hex.png/../..`. A symlink with a generated name loses only the link, never its target. `migrate.php`'s `file_get_contents` uses fixed paths.
+  - **`acc:check-test-quality`:** the 3 new or changed tests follow AAA, have sentence names, use at most 1 double each, and have per-test temp dirs with a `tearDown`. `test_delete_ignores_paths_that_are_not_stored_uploads` has two calls for one behaviour, which the plan allows.
+  - `composer test` is 26 green, and typecheck is clean.
+  - **Live data:** the user's own "Remove cover" on `tesing-new` deleted its unused files. The only unused file in `public/uploads/` is the pre-003 orphan `e48a335f….jpg`, a known gap.
+  - Fixed the stale §B5 delete row.
+  - **Low, left as is:** `pathsIn` also matches `/uploads/<hex>.<ext>` inside an external URL. That only makes the path a candidate, and `isUploadInUse` still protects any file a live post uses.
