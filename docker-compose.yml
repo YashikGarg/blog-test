@@ -1,0 +1,28 @@
+# MySQL only. PHP runs on the host.
+# Start: docker compose --env-file .env.local up -d --wait
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: inkwell-mysql
+    ports:
+      - "127.0.0.1:${DB_PORT:-3308}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:?set DB_ROOT_PASS}
+      MYSQL_DATABASE: ${DB_NAME:-inkwell}
+      APP_DB_USER: ${DB_USER:-inkwell_app}
+      APP_DB_PASS: ${DB_PASS:?set DB_PASS}
+      MIGRATE_DB_USER: ${DB_MIGRATE_USER:-inkwell_migrate}
+      MIGRATE_DB_PASS: ${DB_MIGRATE_PASS:?set DB_MIGRATE_PASS}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d:ro
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  mysql-data:

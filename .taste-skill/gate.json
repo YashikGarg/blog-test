@@ -1,0 +1,42 @@
+{
+ "start": "2026-11-21T05:10:24.823Z",
+ "round": 0,
+ "idle": 0,
+ "errors": 0,
+ "status": "done",
+ "history": [
+  {
+   "at": "2026-11-21T05:11:09.632Z",
+   "mode": "done",
+   "status": "done",
+   "reason": "App UI using the taste system layer only; user approved skipping the landing-page gate",
+   "round": 0
+  },
+  {
+   "at": "2026-11-21T05:12:49.797Z",
+   "mode": "hook",
+   "host": "claude",
+   "decision": "allow",
+   "reason": "no build is active here",
+   "stopHookActive": false
+  },
+  {
+   "at": "2026-11-21T05:13:35.434Z",
+   "mode": "hook",
+   "host": "claude",
+   "decision": "allow",
+   "reason": "no build is active here",
+   "stopHookActive": false
+  }
+ ],
+ "max": 3,
+ "marker": {
+  "page": null,
+  "dir": "/Users/yashik/IdeaProjects/blog-test-4",
+  "kind": "service",
+  "start": "2026-11-21T05:10:24.823Z",
+  "by": "start.mjs"
+ },
+ "doneReason": "App UI using the taste system layer only; user approved skipping the landing-page gate",
+ "at": "2026-11-21T05:11:09.638Z"
+}

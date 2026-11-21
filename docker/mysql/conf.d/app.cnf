@@ -1,0 +1,11 @@
+[mysqld]
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+default-time-zone = '+00:00'
+sql_mode = STRICT_ALL_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+innodb_buffer_pool_size = 256M
+innodb_lock_wait_timeout = 10
+transaction_isolation = REPEATABLE-READ
+slow_query_log = ON
+long_query_time = 1
+log_queries_not_using_indexes = ON

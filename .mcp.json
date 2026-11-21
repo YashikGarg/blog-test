@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "inkwell-dev": {
+      "type": "stdio",
+      "command": "php",
+      "args": [
+        "bin/mcp-server.php"
+      ],
+      "env": {}
+    }
+  }
+}
