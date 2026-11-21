@@ -5,7 +5,7 @@ Read this file in full before you touch code. It has two parts:
 - **Part A — Engineering rules.** These apply to any PHP + MySQL + TypeScript project. Copy Part A into a new project as is.
 - **Part B — This project.** Facts about this repo: stack, structure, schema, routes, env, commands. Rewrite Part B for each new project.
 
-The step-by-step build order is in `docs/IMPLEMENTATION_PLAN.md`. Later approved changes each get their own file, `docs/CHANGES_NNN.md` (currently `docs/CHANGES_002.md`). Implement such a file exactly as written, the same way as the plan.
+The step-by-step build order is in `docs/IMPLEMENTATION_PLAN.md`. Later approved changes each get their own file, `docs/CHANGES_NNN.md` (currently `docs/CHANGES_002.md` and `docs/CHANGES_003.md`). Implement such a file exactly as written, the same way as the plan.
 
 ---
 
@@ -83,7 +83,7 @@ Use well-known Composer or npm packages for infrastructure: env, routing, DI, PS
 - **Never hard-delete.** Every delete is a soft delete:
   - Use `status = 'deleted'` plus `deleted_at`. A CHECK enforces `(status = 'deleted') = (deleted_at IS NOT NULL)`.
   - Record **who** deleted the row in `deleted_by` (FK to `users`, RESTRICT, indexed), with a CHECK `deleted_by IS NULL OR status = 'deleted'`. The service always passes the acting user. NULL is allowed only for rows deleted before the column existed (a real "unknown").
-  - Uploaded files are never deleted either. Replacing or removing a file reference leaves the old file on disk.
+  - Uploaded files are different: an uploaded file is **deleted as soon as no live post uses it**, either as a cover or as an inline image in a body. This happens when the cover is replaced or removed, when the body drops the image, or when the post is soft-deleted, and it runs *after* the DB write so the post's new state counts. A file still used by another live post is kept. (Change set 003; this reverses 002's "never delete files".)
   - Toggles (votes) flip a status (`'active'`/`'removed'`) with one atomic upsert.
   - Every read filters on status, and the status column is in the index the read uses.
   - The runtime DB user has **no DELETE grant**, so a hard delete fails even if code tries one.
@@ -136,7 +136,7 @@ Use well-known Composer or npm packages for infrastructure: env, routing, DI, PS
   - The password policy regex comes from env.
 - **Session cookie**: `HttpOnly`, `SameSite=Lax`, `Secure` in prod, `use_strict_mode=1`, and a custom name.
 - **Authorization**: role checks happen on the server in `RouteMiddleware`, using the route's required role through `Role::satisfies()`. This is a hierarchy: **admin satisfies user**, so admins can also comment, vote, moderate, and log out. Never compare roles with `===` for access. The UI can hide buttons, but hiding a button is not a security control.
-- **Uploads**: enforce the size limit from env, check MIME with `finfo` against the whitelist from env, and verify with `getimagesize`. Use a random filename with the extension taken from the MIME type. Store files in `public/uploads/`, and don't let PHP execute anything there. The app never deletes uploaded files (no `unlink`), so no path from input ever reaches a delete.
+- **Uploads**: enforce the size limit from env, check MIME with `finfo` against the whitelist from env, and verify with `getimagesize`. Use a random filename with the extension taken from the MIME type. Store files in `public/uploads/`, and don't let PHP execute anything there. Deleting an unused upload goes through `ImageUploader::delete()` only. It acts only on a path that exactly matches a generated name (`^/uploads/[a-f0-9]{32}\.(jpg|png|webp|gif)$`) and uses `basename()`, so no path from input can reach `unlink` outside the upload folder, and the default cover (`/assets/…`) is never touched. This is the only `unlink` in `src/`.
 - **Headers**: strict CSP (`default-src 'self'`, no inline script), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `frame-ancestors 'none'`, and HSTS in prod.
 - **Errors**: details only when `APP_DEBUG=true`. In prod, show a generic page and log through Monolog.
 - **Mass assignment**: services pick fields explicitly and never pass a request array through unfiltered.
@@ -196,7 +196,7 @@ Use well-known Composer or npm packages for infrastructure: env, routing, DI, PS
 
 - **Admin**: logs in; creates, edits, and deletes posts (title, markdown body, cover photo, inline media upload, draft or published); deletes **any** comment (moderation).
   - The body uses a markdown editor (EasyMDE): a toolbar, drag/paste image upload, and a Preview / Side-by-side view rendered by the server.
-  - A cover can be replaced or removed; old files are kept. A post without a cover shows the default image (`DEFAULT_COVER`).
+  - A cover can be replaced or removed, and the old image is deleted from `public/uploads/` once no live post uses it (003). A post without a cover shows the default image (`DEFAULT_COVER`).
   - Every soft delete records who did it (`deleted_by`).
 - **User**: registers and logs in. Must be logged in to comment or upvote (toggle, one per user per post).
 - **Comments are full CRUD**: create (logged in), read (everyone, on the post page), update (**owner only**), and delete (**owner or admin**). Edited comments show an "edited" label.
@@ -268,7 +268,8 @@ blog-test-4/
 │   └── init/01-users.sh    # least-privilege app + migrate users (verified)
 ├── docs/
 │   ├── IMPLEMENTATION_PLAN.md
-│   └── CHANGES_002.md      # editor, preview, default cover, deleted_by, per-IP throttle
+│   ├── CHANGES_002.md      # editor, preview, default cover, deleted_by, per-IP throttle
+│   └── CHANGES_003.md      # delete unused images, checkbox CSS fix (30 min)
 ├── frontend/src/
 │   ├── editor.ts           # admin post form only: EasyMDE + server preview + image upload (change set 002)
 │   ├── http.ts             # send<T>() + runtime type guards (all network access)
@@ -542,3 +543,18 @@ composer serve                       # php -S localhost:8000 -t public public/in
     1. The toolbar rule is `.EasyMDEContainer .editor-toolbar button { min-width: 44px; … }`, one class more than written. EasyMDE's own `min-width: 30px` has the same specificity and `editor.css` loads after `app.css`, so the written rule left nine toolbar buttons 30 px wide on phones. Now measured at 44 px.
     2. Added `.EasyMDEContainer .prose { margin-block: 0; }`. The preview pane carries the page's `.prose` class (`previewClass`), whose 32 px margin pushed the absolutely positioned preview down and showed the editor text under it.
   - **Unchanged:** B1–B8 already match what was built. The A3 diagram still shows `Error → SecurityHeaders` (deferred item 3 above).
+- 2026-11-21 (user request; **planned, see `docs/CHANGES_003.md`**, 30-minute limit): change set 003.
+  1. **Delete unused images** (reverses 002's "files are never deleted"). An `/uploads/…` file is deleted once no post with status other than `deleted` uses it, as a cover or inline in a body. It's checked after the DB write when the cover is replaced or removed, the body drops the image, or the post is soft-deleted.
+     - The in-use query `UPLOAD_IN_USE` (`cover_image = :path OR LOCATE(:path2, body_md) > 0`) was run as `inkwell_app` on the live Docker DB: EXPLAIN gives `range` on `idx_posts_status_published`. It reads `body_md` of live rows, which is accepted because it runs only on admin saves and deletes.
+     - It correctly marked 6 of the 7 local upload files as in use.
+     - `ImageUploader::delete()` acts only on generated names (32 hex + extension) via `basename()`.
+     - **Known gaps:**
+       - Images uploaded in the editor but never saved in a post.
+       - Files orphaned before 003 (one locally: `e48a335f….jpg`).
+       - Soft-deleted posts can't be restored with their images (no restore feature exists).
+       - Two admins saving at the same moment (single admin).
+  2. **Checkbox CSS fix** (user screenshot). `system.css` styles every `.field input` as a text box, so the "Remove cover" checkbox rendered as a 44 px box on its own line with its text below.
+     - Fix: three `app.css` rules (an inline flex label with a 44 px row, a 20 px native box with `accent-color`, and a `.field` column of `minmax(0, 1fr)` so the editor can't push the field past the gutter).
+     - Verified by injecting the rules into the real edit page in headless Chrome at 1440 and 390 px.
+  - Tests: 24 → 26 (the remove-cover test now expects the file deleted; one new test keeps a file still used by another post; one checks that `delete()` ignores paths that aren't generated names).
+  - **Parallel plan** (user short on time): subagent A owns CSS and `ImageUploader` plus its test; subagent B owns the repository, `DevTools` and the MCP description; the main agent writes `PostService` and its tests, then reviews A and B and runs the verification. That's about 15 minutes instead of 30. No two streams touch the same file.
