@@ -19,6 +19,9 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(PostService::class)]
 final class PostServiceTest extends TestCase
 {
+    /** A generated upload name is 32 hex characters plus the extension; ImageUploader::delete ignores anything else. */
+    private const OLD_FILE = '0123456789abcdef0123456789abcdef.png';
+
     public function test_create_adds_suffix_when_slug_is_taken(): void
     {
         $posts = $this->createMock(PostRepositoryInterface::class);
@@ -47,19 +50,34 @@ final class PostServiceTest extends TestCase
         $service->getPublishedBySlug('nope');
     }
 
-    public function test_update_with_remove_cover_clears_cover_and_keeps_file(): void
+    public function test_update_with_remove_cover_deletes_the_unused_old_file(): void
     {
         $dir = $this->tempDir();
-        file_put_contents($dir . '/old.png', 'png');
+        file_put_contents($dir . '/' . self::OLD_FILE, 'png');
         $posts = $this->createMock(PostRepositoryInterface::class);
-        $posts->method('findById')->willReturn($this->post('/uploads/old.png'));
+        $posts->method('findById')->willReturn($this->post('/uploads/' . self::OLD_FILE));
+        $posts->method('isUploadInUse')->willReturn(false);
         $posts->expects(self::once())->method('update')
             ->with('post-1', self::callback(static fn (array $data): bool => $data['cover_image'] === null));
         $service = $this->service($posts, $dir);
 
         $service->update('post-1', ['title' => 'T', 'body' => 'B', 'status' => 'draft', 'excerpt' => '', 'remove_cover' => '1'], null);
 
-        self::assertFileExists($dir . '/old.png');
+        self::assertFileDoesNotExist($dir . '/' . self::OLD_FILE);
+    }
+
+    public function test_update_keeps_old_cover_still_used_by_another_post(): void
+    {
+        $dir = $this->tempDir();
+        file_put_contents($dir . '/' . self::OLD_FILE, 'png');
+        $posts = $this->createStub(PostRepositoryInterface::class);
+        $posts->method('findById')->willReturn($this->post('/uploads/' . self::OLD_FILE));
+        $posts->method('isUploadInUse')->willReturn(true);
+        $service = $this->service($posts, $dir);
+
+        $service->update('post-1', ['title' => 'T', 'body' => 'B', 'status' => 'draft', 'excerpt' => '', 'remove_cover' => '1'], null);
+
+        self::assertFileExists($dir . '/' . self::OLD_FILE);
     }
 
     protected function tearDown(): void

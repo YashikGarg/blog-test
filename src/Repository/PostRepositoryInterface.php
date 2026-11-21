@@ -32,6 +32,9 @@ interface PostRepositoryInterface
     /** Slugs stay reserved after a soft delete, so deleted rows count too. */
     public function slugExists(string $slug, ?string $exceptId): bool;
 
+    /** True when a draft or published post uses this public path (e.g. /uploads/x.jpg) as its cover or inside its body. */
+    public function isUploadInUse(string $publicPath): bool;
+
     /**
      * Inserts the post and its vote-counter row in one transaction.
      *

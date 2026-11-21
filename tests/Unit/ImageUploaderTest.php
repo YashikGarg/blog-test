@@ -58,6 +58,19 @@ final class ImageUploaderTest extends TestCase
         self::assertFileExists($this->dir . '/out/' . basename($publicPath));
     }
 
+    public function test_delete_ignores_paths_that_are_not_stored_uploads(): void
+    {
+        mkdir($this->dir . '/out', 0755, true);
+        $keep = $this->dir . '/out/keep.png';
+        file_put_contents($keep, 'x');
+        $uploader = $this->uploader();
+
+        $uploader->delete('/uploads/../uploads/keep.png');
+        $uploader->delete('/uploads/keep.png');
+
+        self::assertFileExists($keep);
+    }
+
     private function uploader(): ImageUploader
     {
         return new ImageUploader($this->dir . '/out', '/uploads/', 1048576, ['image/png', 'image/jpeg']);

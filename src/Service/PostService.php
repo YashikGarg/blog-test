@@ -85,14 +85,22 @@ final readonly class PostService
         $data = $this->validate($input);
         $newCover = $this->hasUpload($cover) ? $this->uploader->store($cover) : null;
         $removeCover = ($input['remove_cover'] ?? '') === '1';
+        $newCoverValue = $newCover ?? ($removeCover ? null : $existing->coverImage);
 
         $this->posts->update($id, $data + [
-            // A new upload wins over the checkbox. Old files stay on disk (they are never deleted).
-            'cover_image' => $newCover ?? ($removeCover ? null : $existing->coverImage),
+            // A new upload wins over the checkbox. Unused old files are deleted after the write (deleteUnused).
+            'cover_image' => $newCoverValue,
             // Set the first time the post is published, then kept.
             'published_at' => $existing->publishedAt
                 ?? ($data['status'] === PostStatus::Published->value ? gmdate('Y-m-d H:i:s') : null),
         ]);
+
+        // Images the post no longer references: the replaced or removed cover, and inline images dropped from the body.
+        $candidates = array_diff($this->uploader->pathsIn($existing->bodyMd), $this->uploader->pathsIn($data['body_md']));
+        if ($existing->coverImage !== null && $existing->coverImage !== $newCoverValue) {
+            $candidates[] = $existing->coverImage;
+        }
+        $this->deleteUnused(array_values($candidates));
     }
 
     /** Admin editor preview: the same CommonMark as the post page, never cached. */
@@ -101,12 +109,15 @@ final readonly class PostService
         return $this->markdown->render($markdown, null);
     }
 
-    /** Soft delete. The cover file is kept so the post stays restorable. */
+    /** Soft delete; then its images that no live post uses are deleted. */
     public function delete(string $id, string $actorId): void
     {
+        $post = $this->getForEdit($id); // NotFoundException if missing or already deleted
         if (!$this->posts->softDelete($id, $actorId)) {
             throw new NotFoundException('Post not found');
         }
+        // The post is 'deleted' now, so it no longer counts as using its images.
+        $this->deleteUnused([...$this->uploader->pathsIn($post->bodyMd), ...($post->coverImage !== null ? [$post->coverImage] : [])]);
     }
 
     /**
@@ -138,6 +149,16 @@ final readonly class PostService
         }
 
         return ['title' => $title, 'body_md' => $body, 'excerpt' => $excerpt, 'status' => $status->value];
+    }
+
+    /** @param list<string> $candidates paths the post no longer references; each is deleted unless another live post uses it */
+    private function deleteUnused(array $candidates): void
+    {
+        foreach (array_unique($candidates) as $path) {
+            if (!$this->posts->isUploadInUse($path)) {
+                $this->uploader->delete($path);
+            }
+        }
     }
 
     private function hasUpload(?UploadedFileInterface $file): bool

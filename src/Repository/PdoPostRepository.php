@@ -49,6 +49,9 @@ final readonly class PdoPostRepository implements PostRepositoryInterface
     public const ADMIN_TAIL = ' ORDER BY p.id DESC LIMIT :limit';
     public const SLUG_EXISTS = 'SELECT 1 FROM posts WHERE slug = :slug';
     public const SLUG_EXISTS_EXCEPT = ' AND id <> UUID_TO_BIN(:except)';
+    public const UPLOAD_IN_USE = "SELECT 1 FROM posts
+        WHERE status <> 'deleted' AND (cover_image = :path OR LOCATE(:path2, body_md) > 0)
+        LIMIT 1";
 
     public function __construct(private PDO $pdo)
     {
@@ -114,6 +117,16 @@ final readonly class PdoPostRepository implements PostRepositoryInterface
         if ($exceptId !== null) {
             $stmt->bindValue(':except', $exceptId);
         }
+        $stmt->execute();
+
+        return $stmt->fetchColumn() !== false;
+    }
+
+    public function isUploadInUse(string $publicPath): bool
+    {
+        $stmt = $this->pdo->prepare(self::UPLOAD_IN_USE);
+        $stmt->bindValue(':path', $publicPath);
+        $stmt->bindValue(':path2', $publicPath);
         $stmt->execute();
 
         return $stmt->fetchColumn() !== false;

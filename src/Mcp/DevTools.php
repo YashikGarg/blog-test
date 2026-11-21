@@ -32,7 +32,7 @@ final readonly class DevTools
     /**
      * EXPLAIN one of the named repository queries.
      *
-     * @param string $name one of: list_published, list_published_after_cursor, search, admin_list, post_by_slug, post_by_id, slug_exists, comments_for_post, vote_state, has_voted, login_lookup
+     * @param string $name one of: list_published, list_published_after_cursor, search, admin_list, post_by_slug, post_by_id, slug_exists, upload_in_use, comments_for_post, vote_state, has_voted, login_lookup
      */
     public function explainQuery(string $name): array
     {
@@ -57,6 +57,7 @@ final readonly class DevTools
             'post_by_slug' => [PdoPostRepository::BY_SLUG, ['slug' => $slug]],
             'post_by_id' => [PdoPostRepository::BY_ID, ['id' => $postId]],
             'slug_exists' => [PdoPostRepository::SLUG_EXISTS . ' LIMIT 1', ['slug' => $slug]],
+            'upload_in_use' => [PdoPostRepository::UPLOAD_IN_USE, ['path' => '/uploads/x.jpg', 'path2' => '/uploads/x.jpg']],
             'comments_for_post' => [PdoCommentRepository::BY_POST, ['post' => $postId]],
             'vote_state' => [PdoVoteRepository::STATE, ['u' => $userId, 'p' => $postId]],
             'has_voted' => [PdoVoteRepository::HAS_VOTED, ['p' => $postId, 'u' => $userId]],

@@ -10,6 +10,7 @@ use Psr\Http\Message\UploadedFileInterface;
 final readonly class ImageUploader
 {
     private const EXTENSIONS = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+    private const STORED_PATH = '~^/uploads/[a-f0-9]{32}\.(?:jpg|png|webp|gif)$~';
 
     /** @param list<string> $allowedMimes */
     public function __construct(
@@ -47,5 +48,25 @@ final readonly class ImageUploader
         $file->moveTo($this->uploadDir . '/' . $name);
 
         return $this->publicPrefix . $name;
+    }
+
+    /** Deletes a stored upload. Anything that is not exactly a name this class generated is ignored (no path from input reaches unlink). */
+    public function delete(string $publicPath): void
+    {
+        if (preg_match(self::STORED_PATH, $publicPath) !== 1) {
+            return;
+        }
+        $file = $this->uploadDir . '/' . basename($publicPath);
+        if (is_file($file)) {
+            unlink($file);
+        }
+    }
+
+    /** @return list<string> every stored-upload path that appears in a markdown body */
+    public function pathsIn(string $markdown): array
+    {
+        preg_match_all('~/uploads/[a-f0-9]{32}\.(?:jpg|png|webp|gif)~', $markdown, $m);
+
+        return array_values(array_unique($m[0]));
     }
 }
