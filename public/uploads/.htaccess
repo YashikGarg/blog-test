@@ -1,0 +1,13 @@
+# Uploaded files are data, never code: no PHP, images only, never sniffed, never scripted.
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+RemoveHandler .php .phtml .php3 .php4 .php5 .phps
+<FilesMatch "^(?!.*\.(jpe?g|png|webp|gif)$).*$">
+  Require all denied
+</FilesMatch>
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set Content-Security-Policy "default-src 'none'; sandbox"
+</IfModule>
+Options -ExecCGI -Indexes

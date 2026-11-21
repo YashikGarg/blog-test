@@ -1,0 +1,25 @@
+{% extends 'layout.twig' %}
+{% block title %}Log in: Inkwell{% endblock %}
+{% block content %}
+<section class="page">
+  <div class="wrap narrow">
+    <h1>Log in</h1>
+    <form action="/login" method="post" data-ajax="form" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" value="{{ old.email|default('') }}" autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="next" required aria-describedby="email-err"{% if errors.email|default('') %} aria-invalid="true"{% endif %}>
+        <p class="field__error" id="email-err" data-error-for="email"{% if not errors.email|default('') %} hidden{% endif %}>{{ errors.email|default('') }}</p>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" enterkeyhint="done" required aria-describedby="password-err"{% if errors.password|default('') %} aria-invalid="true"{% endif %}>
+        <p class="field__error" id="password-err" data-error-for="password"{% if not errors.password|default('') %} hidden{% endif %}>{{ errors.password|default('') }}</p>
+      </div>
+      <div class="btn-row"><button class="btn btn--primary" type="submit">Log in</button></div>
+      <p class="form__status" role="status" data-form-status>{{ errors._form|default('') }}</p>
+      <p class="t-small muted">New here? <a class="link" href="/register">Create an account</a></p>
+    </form>
+  </div>
+</section>
+{% endblock %}

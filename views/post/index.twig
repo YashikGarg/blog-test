@@ -1,0 +1,55 @@
+{% extends 'layout.twig' %}
+{% block title %}Inkwell: read the latest posts{% endblock %}
+
+{% macro card(p, first) %}
+<a class="tile post-card" href="/posts/{{ p.slug }}">
+  {% if p.coverImage %}
+  <div class="tile__media"><img src="{{ p.coverImage }}" alt="" width="640" height="480" {% if first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}></div>
+  {% endif %}
+  <div class="tile__head"><h2 class="t-card">{{ p.title }}</h2></div>
+  <p class="tile__facts">{{ p.authorName }} · {{ p.publishedAt }} · {{ p.upvotes }} upvotes</p>
+  {% if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}
+</a>
+{% endmacro %}
+
+{% block content %}
+{% import _self as ui %}
+<section class="page">
+  <div class="wrap">
+    <header class="page-head">
+      <h1>Read the latest posts</h1>
+      <p class="t-lead muted">Short, plain writing. Search it, upvote what you like, and join the comments.</p>
+    </header>
+
+    <search id="search" class="searchbar">
+      <form action="/" method="get" data-ajax="search" class="searchbar__form">
+        <label for="q" class="visually-hidden">Search posts</label>
+        <input id="q" type="search" name="q" value="{{ q }}" maxlength="100" placeholder="Search posts" autocomplete="off" spellcheck="false" enterkeyhint="search">
+        <button class="btn btn--secondary" type="submit">Search</button>
+        <p class="form__status" role="status" data-form-status></p>
+      </form>
+    </search>
+
+    <div class="cards" id="card-list">
+      {% for p in posts %}{{ ui.card(p, loop.first) }}{% endfor %}
+    </div>
+    <p class="empty" id="no-posts"{% if posts %} hidden{% endif %}>No posts found{% if q %} for "{{ q }}"{% endif %}.</p>
+
+    <nav class="pager" aria-label="Pages">
+      {% if nextCursor %}
+        <a class="btn btn--secondary" data-load-more href="/?cursor={{ nextCursor|url_encode }}{% if q %}&amp;q={{ q|url_encode }}{% endif %}">Older posts</a>
+      {% endif %}
+      {% if cursor %}<a class="link" href="/{% if q %}?q={{ q|url_encode }}{% endif %}">Latest</a>{% endif %}
+    </nav>
+  </div>
+</section>
+
+<template id="card-tpl">
+  <a class="tile post-card" href="/">
+    <div class="tile__media" hidden><img src="" alt="" width="640" height="480" loading="lazy"></div>
+    <div class="tile__head"><h2 class="t-card"></h2></div>
+    <p class="tile__facts"></p>
+    <p class="post-card__excerpt"></p>
+  </a>
+</template>
+{% endblock %}

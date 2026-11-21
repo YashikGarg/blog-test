@@ -1,0 +1,15 @@
+{
+  "name": "inkwell-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild frontend/src/main.ts --bundle --minify --format=esm --target=es2022 --outfile=public/assets/app.js",
+    "watch": "esbuild frontend/src/main.ts --bundle --format=esm --target=es2022 --outfile=public/assets/app.js --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@fontsource-variable/schibsted-grotesk": "^5.3.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

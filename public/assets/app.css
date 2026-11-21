@@ -1,0 +1,110 @@
+@font-face { font-family: "Schibsted Grotesk"; src: url("/assets/fonts/schibsted-grotesk.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
+:root {
+  --p-bg: #f7f3ec; --p-surface: #ede6da; --p-ink: #2a2622; --p-muted: #665e55;
+  --p-accent: #7a4a2c; --p-accent-ink: #ffffff; --p-action: #7a4a2c; --p-action-ink: #ffffff;
+  --p-inv-bg: #2a2622; --p-inv-surface: #36322e; --p-inv-ink: #f7f3ec; --p-inv-muted: #a29e98;
+  --p-inv-accent: #f7f3ec; --p-inv-accent-ink: #2a2622; --p-inv-action: #f7f3ec; --p-inv-action-ink: #2a2622;
+  --font-display: "Schibsted Grotesk", system-ui, sans-serif;
+  --font-text: "Schibsted Grotesk", system-ui, sans-serif;
+  --display-weight: 400; --display-tracking: -0.035em; --display-tracking-xl: -0.042em;
+}
+
+/* ---- Inkwell page bits, built on the taste tokens (--s-*, --r-*) ---- */
+html { color-scheme: light; }
+.visually-hidden { position: absolute; clip-path: inset(50%); overflow: hidden; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; white-space: nowrap; }
+
+/* the nav is fixed, so the page starts below it. An app page is not a landing-page section: the kit's
+   section height and padding (main > section) are replaced by plain page spacing. */
+main { min-height: 70vh; }
+main > .page { height: auto; min-height: 0; padding: calc(var(--nav) + var(--s-6)) 0 var(--s-9); }
+main > .page > .wrap { height: auto; }
+.page-head { display: grid; gap: var(--s-3); margin-bottom: var(--s-6); }
+.page-head--row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); flex-wrap: wrap; }
+.narrow { max-width: 30rem; }
+.narrow-wide { max-width: 44rem; }
+.measure { max-width: 62ch; }
+.stack { display: grid; gap: var(--s-4); }
+.stack .btn-row { display: flex; gap: var(--s-3); flex-wrap: wrap; }
+.empty { color: var(--muted); margin-block: var(--s-5); }
+
+/* flash messages */
+.flash-area:empty { display: none; }
+.flash { margin: 0 0 var(--s-4); padding: var(--s-3) var(--s-4); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--card); }
+.flash--error { border-color: var(--error, #b42318); }
+
+/* search */
+.searchbar { display: block; margin-bottom: var(--s-6); scroll-margin-top: calc(var(--nav) + var(--s-5)); }
+.searchbar__form { display: flex; gap: var(--s-3); flex-wrap: wrap; align-items: center; }
+.searchbar input[type="search"] { flex: 1 1 14rem; min-width: 0; height: var(--btn-h); padding: 0 var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--bg); color: var(--ink); font: inherit; }
+.searchbar .form__status { flex-basis: 100%; }
+
+/* post cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr)); gap: var(--s-6) var(--s-5); }
+.post-card { color: inherit; text-decoration: none; }
+.post-card h2 { margin: 0; }
+.pager { display: flex; gap: var(--s-5); align-items: center; margin-top: var(--s-7); flex-wrap: wrap; }
+
+/* article */
+.article { max-width: 70ch; }
+.article__cover { width: 100%; height: auto; max-height: 28rem; object-fit: cover; border-radius: var(--r-lg); margin-bottom: var(--s-6); }
+.article h1 { margin-bottom: var(--s-3); }
+.prose { margin-block: var(--s-6); font-size: var(--t-body); line-height: 1.7; }
+.prose > * + * { margin-top: var(--s-4); }
+.prose img { max-width: 100%; height: auto; border-radius: var(--r-md); }
+.prose pre { overflow-x: auto; padding: var(--s-4); background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); }
+.prose code { font-family: var(--font-mono, ui-monospace, monospace); font-size: .92em; }
+.prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.vote { margin-block: var(--s-6); }
+.vote .btn[aria-pressed="true"] { background: var(--action); color: var(--action-ink); border-color: var(--action); }
+
+/* comments */
+#comments { margin-top: var(--s-8); scroll-margin-top: calc(var(--nav) + var(--s-5)); }
+.comments { list-style: none; margin: var(--s-5) 0; padding: 0; display: grid; gap: var(--s-5); }
+.comment { display: grid; gap: var(--s-2); padding-bottom: var(--s-5); border-bottom: 1px solid var(--line); }
+.comment__body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment__actions { display: flex; gap: var(--s-4); align-items: flex-start; flex-wrap: wrap; }
+.comment__edit summary { cursor: pointer; min-height: 44px; min-width: 44px; padding-inline: var(--s-2); display: inline-flex; align-items: center; justify-content: center; font-weight: 500; }
+.comment__edit[open] { flex-basis: 100%; }
+.comment-form { margin-top: var(--s-6); }
+.field textarea { font: inherit; width: 100%; }
+.field select { font: inherit; }
+.textarea-tall { min-height: 20rem; }
+.field input[type="file"] { height: auto; padding: var(--s-3); }
+.cover-preview { max-width: 20rem; height: auto; border-radius: var(--r-md); }
+:user-invalid { outline-color: var(--error, #b42318); }
+
+/* admin */
+.table-scroll { overflow-x: auto; }
+.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table th, .admin-table td { padding: var(--s-3) var(--s-3); border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.admin-table thead th { font-size: var(--t-small); color: var(--muted); font-weight: 500; }
+.admin-table tbody th { font-weight: 500; }
+.admin-table__actions { display: flex; gap: var(--s-3); flex-wrap: wrap; align-items: center; }
+.trace { overflow-x: auto; padding: var(--s-4); background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); font-size: var(--t-small); }
+
+/* nav bits */
+.nav__user { white-space: nowrap; }
+.nav__actions form { margin: 0; }
+.site-footer { padding-block: var(--s-7); border-top: 1px solid var(--line); }
+
+/* the one confirm dialog (native modal) */
+dialog { max-width: min(28rem, calc(100% - 2 * var(--s-5))); padding: var(--s-6); border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--bg); color: var(--ink); }
+dialog::backdrop { background: color-mix(in oklab, var(--p-ink) 45%, transparent); overflow: hidden; overscroll-behavior: contain; }
+dialog:modal { overscroll-behavior: contain; }
+dialog .btn-row { display: flex; gap: var(--s-3); justify-content: flex-end; flex-wrap: wrap; }
+
+@media (max-width: 639px) {
+  .stack .btn-row .btn, .searchbar .btn { width: 100%; }
+  .nav__user { display: none; }
+}
+
+/* space between a page heading and what follows (forms, article meta) */
+.page .wrap > h1 + :not(.page-head) { margin-top: var(--s-5); }
+.page .wrap.narrow > h1, .page .wrap.narrow-wide > h1 { margin-bottom: 0; }
+
+/* markdown headings inside a post stay below the page title */
+.prose :is(h1, h2) { font-size: var(--t-h2); line-height: 1.15; }
+.prose :is(h3, h4) { font-size: var(--t-h3); line-height: 1.2; }
+.prose :is(ul, ol) { list-style: revert; padding-inline-start: var(--s-5); }
+.prose li + li { margin-top: var(--s-2); }
+.prose blockquote { margin-inline: 0; padding-inline-start: var(--s-4); border-inline-start: 2px solid var(--line-strong); color: var(--muted); }

@@ -1,0 +1,112 @@
+{% extends 'layout.twig' %}
+{% block title %}{{ post.title }}: Inkwell{% endblock %}
+{% block description %}{{ post.excerpt ?: 'A post on Inkwell by ' ~ post.authorName }}{% endblock %}
+
+{% block content %}
+<article class="page">
+  <div class="wrap article">
+    {% if post.coverImage %}
+      <img class="article__cover" src="{{ post.coverImage }}" alt="" width="1200" height="630" fetchpriority="high">
+    {% endif %}
+    <h1>{{ post.title }}</h1>
+    <p class="t-small muted">{{ post.authorName }} · {{ post.publishedAt }}</p>
+
+    <div class="prose">{{ html|raw }}</div>
+
+    <div class="vote">
+      {% if currentUser %}
+      <form action="/posts/{{ post.id }}/vote" method="post" data-ajax="vote">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <input type="hidden" name="slug" value="{{ post.slug }}">
+        <button class="btn btn--secondary" type="submit" aria-pressed="{{ voted ? 'true' : 'false' }}">Upvote <span data-vote-count>{{ post.upvotes }}</span></button>
+        <p class="form__status" role="status" data-form-status></p>
+      </form>
+      {% else %}
+        <a class="btn btn--secondary" href="/login">Log in to upvote ({{ post.upvotes }})</a>
+      {% endif %}
+    </div>
+
+    <section id="comments" aria-labelledby="comments-title">
+      <h2 id="comments-title" class="t-h3">Comments</h2>
+      <p class="empty" id="no-comments"{% if comments %} hidden{% endif %}>No comments yet.</p>
+      <ul class="comments" id="comment-list">
+        {% for c in comments %}
+        <li class="comment" data-id="{{ c.id }}">
+          <p class="comment__meta"><strong class="comment__author">{{ c.userName }}</strong> <span class="comment__date t-small muted">{{ c.createdAt }}</span> <span class="comment__edited t-small muted"{% if not c.edited %} hidden{% endif %}>(edited)</span></p>
+          <p class="comment__body">{{ c.body }}</p>
+          <div class="comment__actions">
+            {% if c.canEdit %}
+            <details class="comment__edit">
+              <summary>Edit</summary>
+              <form action="/comments/{{ c.id }}" method="post" data-ajax="comment-update" class="stack">
+                <input type="hidden" name="_csrf" value="{{ csrf }}">
+                <input type="hidden" name="slug" value="{{ post.slug }}">
+                <div class="field">
+                  <label for="edit-{{ c.id }}">Your comment</label>
+                  <textarea id="edit-{{ c.id }}" name="body" required aria-describedby="edit-{{ c.id }}-err">{{ c.body }}</textarea>
+                  <p class="field__error" id="edit-{{ c.id }}-err" data-error-for="body" hidden></p>
+                </div>
+                <div class="btn-row"><button class="btn btn--secondary btn--sm" type="submit">Save comment</button></div>
+                <p class="form__status" role="status" data-form-status></p>
+              </form>
+            </details>
+            {% endif %}
+            {% if c.canDelete %}
+            <form action="/comments/{{ c.id }}/delete" method="post" data-ajax="comment-delete" data-confirm="Delete this comment?">
+              <input type="hidden" name="_csrf" value="{{ csrf }}">
+              <input type="hidden" name="slug" value="{{ post.slug }}">
+              <button class="btn btn--secondary btn--sm" type="submit">Delete</button>
+            </form>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+
+      {% if currentUser %}
+      <form action="/posts/{{ post.id }}/comments" method="post" data-ajax="comment-create" class="stack comment-form">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <input type="hidden" name="slug" value="{{ post.slug }}">
+        <div class="field">
+          <label for="comment-body">Add a comment</label>
+          <textarea id="comment-body" name="body" required aria-describedby="comment-body-err"></textarea>
+          <p class="field__error" id="comment-body-err" data-error-for="body" hidden></p>
+        </div>
+        <div class="btn-row"><button class="btn btn--primary" type="submit">Post comment</button></div>
+        <p class="form__status" role="status" data-form-status></p>
+      </form>
+      {% else %}
+        <p><a class="link" href="/login">Log in to comment</a></p>
+      {% endif %}
+    </section>
+  </div>
+</article>
+
+<template id="comment-tpl">
+  <li class="comment" data-id="">
+    <p class="comment__meta"><strong class="comment__author"></strong> <span class="comment__date t-small muted"></span> <span class="comment__edited t-small muted" hidden>(edited)</span></p>
+    <p class="comment__body"></p>
+    <div class="comment__actions">
+      <details class="comment__edit">
+        <summary>Edit</summary>
+        <form action="" method="post" data-ajax="comment-update" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="slug" value="{{ post.slug }}">
+          <div class="field">
+            <label for="">Your comment</label>
+            <textarea id="" name="body" required></textarea>
+            <p class="field__error" data-error-for="body" hidden></p>
+          </div>
+          <div class="btn-row"><button class="btn btn--secondary btn--sm" type="submit">Save comment</button></div>
+          <p class="form__status" role="status" data-form-status></p>
+        </form>
+      </details>
+      <form action="" method="post" data-ajax="comment-delete" data-confirm="Delete this comment?">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <input type="hidden" name="slug" value="{{ post.slug }}">
+        <button class="btn btn--secondary btn--sm" type="submit">Delete</button>
+      </form>
+    </div>
+  </li>
+</template>
+{% endblock %}

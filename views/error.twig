@@ -1,0 +1,12 @@
+{% extends 'layout.twig' %}
+{% block title %}{{ status }}: Inkwell{% endblock %}
+{% block content %}
+<section class="page">
+  <div class="wrap measure">
+    <h1>{{ status }}</h1>
+    <p class="t-lead">{{ message }}</p>
+    {% if trace %}<pre class="trace">{{ trace }}</pre>{% endif %}
+    <p><a class="link" href="/">Back to the latest posts</a></p>
+  </div>
+</section>
+{% endblock %}

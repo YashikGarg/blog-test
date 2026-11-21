@@ -446,4 +446,30 @@ composer serve                       # php -S localhost:8000 -t public public/in
   - The deal **armed taste-skill's landing-page gate**. It was closed with `gate.mjs --done`, giving `GATE: DONE`, so its Stop hook won't block Sonnet. The plan forbids re-dealing.
   - Light only. This replaces the earlier "dark mode" item.
   - The step 0 copy path now uses `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`, so it works on any profile.
+- 2026-11-21 (implementation, steps 0-8 done; user approved this entry and the four security items below). Verified: `composer test` 22 green (one mutation check on the comment-ownership rule failed the test as it should), `npm run typecheck` and `npm run build` clean, `composer audit` and `npm audit --omit=dev` clean, MCP `verify_constraints` 13/13 PASS and `verify_vote_counts` `[]`, and a headless-Chrome click-through (user flow at 390 px: 21 checks, admin flow at 1440 px: 12 checks, no page reloads).
+  - **Deviations and decisions:**
+    1. `PASSWORD_REGEX` and `PASSWORD_HINT` are single-quoted in the env files (phpdotenv rejects `\d` inside double quotes).
+    2. `makePdo(array $db, string $user, string $pass)` takes the DB settings first.
+    3. `RouteMiddleware` has no logger. 403s are logged in `ErrorMiddleware`.
+    4. Repository SQL lives in public constants that `DevTools::explainQuery` reuses, so the two cannot drift.
+    5. List queries return `'' AS body_md` (cards do not need the body).
+    6. The non-search list uses `FORCE INDEX (idx_posts_status_published)`. With almost every post `published`, MCP EXPLAIN on 300 posts showed `type ALL` + `Using filesort`; now it is a backward index scan with no filesort. Search keeps the FULLTEXT index.
+    7. taste `system.js` and `motion.js` load as `type="module"` (they are ES modules; step 5 said "deferred").
+    8. `CommentService` add/update/delete return a `Comment` (it carries the post slug). `PostService` gained `listForAdmin` and `getForEdit`. `VoteService` gained `hasVoted`.
+    9. No password rehash on login: `UserRepositoryInterface` has no update method.
+    10. The nav has a Search link to `/#search`. The search form itself is on the index page.
+    11. `BaseController::respond()` has a `$navigates` flag, so a flash survives an AJAX redirect (login, logout, post save).
+    12. `AuthService` uses a fixed `DUMMY_HASH` constant. Hashing a dummy per request made unknown emails about twice as slow as known ones (timing oracle).
+    13. `config/settings.php` reads each variable through `envValue()`: `getenv()` first, then `$_ENV`, then `$_SERVER`. Under a web SAPI a real server variable is visible only through `getenv()` (PHP's default `variables_order` has no `E`), and phpdotenv is immutable, so reading `$_ENV` first made the file beat the real variable. `dotenv()` builds the loader with a `PutenvAdapter` so it sees real variables and `required()` works with secrets that exist only in the server environment. A10 ("real server env vars win") now holds under `php -S`, CLI and FPM; verified with `SESSION_LIFETIME=2` (idle timeout fires after 3.5 s idle).
+    14. Auth forms log malformed bodies (`auth.login_malformed`, `auth.register_malformed`) and the GET_LOCK timeout (`auth.lock_timeout`), as A7 requires for 422s on auth forms. The vote body is validated before the vote flips.
+    15. The `<dialog>` confirm is one shared element in `layout.twig`. App pages replace the kit's `main > section` height and padding with plain page spacing (`main > .page` in `app.css`).
+    16. Fixed after a no-JavaScript pass over every form: `BaseController::respondInvalid` called `reset()` on a readonly property, so a blank comment without JS gave a 500 instead of a flash and redirect. The edit `<summary>` is now 44 px wide as well as tall (A9).
+  - **Security audit** (`acc:audit-security` via the read-only `acc:security-reviewer` agent): 0 Critical, 0 High. User approved these four changes, now applied:
+    1. **Headers on error pages:** `SecurityHeadersMiddleware` is now outermost in `public/index.php` (before `ErrorMiddleware`), so 403/404/422/500 pages carry the CSP and nosniff. The A3 diagram and plan step 2 still say "Error first"; the code is the source of truth here.
+    2. **Admin seed guard:** `bin/migrate.php` refuses an empty, example-value or regex-failing `ADMIN_PASSWORD` in every env except `local` (was prod only). `AuthService::login` rejects an empty password. `.env.dev` has a non-example placeholder.
+    3. **Redirect rule:** one rule (single leading `/`, no backslash, no control character) for header redirects, the JSON `redirect` value (`BaseController::safePath`) and `isInternalPath` in `http.ts`.
+    4. **Uploads and prod ini:** `public/uploads/.htaccess` allows image extensions only, sets `nosniff` and a sandbox CSP, and wraps `php_flag` in `<IfModule mod_php.c>`. `config/php.prod.ini` adds `zend.exception_ignore_args = On`.
+  - **Known gaps (unchanged from earlier decisions, confirmed by the audit):** register email enumeration; throttle key uses the full client IP, so one IPv6 /64 gives many counters; the role is cached in the session until logout; comments on unpublished posts can still be edited or deleted; no spam rate limit on register/comment. Under `php -S` the uploads `.htaccess` is not read, so use Apache/nginx rules there.
+  - **Subagents:** step 7 tests (reviewed by the main agent; it skipped the three required test skills, so `acc:check-test-quality` and `acc:testing-knowledge` were run by the main agent and three try/catch blocks became a helper) and the read-only security audit above.
+  - **Dev data:** the local DB was reset to the seed state (one admin, one welcome post) after testing.
 

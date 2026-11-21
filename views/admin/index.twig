@@ -1,0 +1,38 @@
+{% extends 'layout.twig' %}
+{% block title %}Admin: Inkwell{% endblock %}
+{% block content %}
+<section class="page">
+  <div class="wrap">
+    <header class="page-head page-head--row">
+      <h1>Posts</h1>
+      <a class="btn btn--primary" href="/admin/posts/new">New post</a>
+    </header>
+    <p class="form__status" role="status" data-form-status id="admin-status"></p>
+    <div class="table-scroll">
+      <table class="admin-table">
+        <caption class="visually-hidden">Draft and published posts, newest first</caption>
+        <thead><tr><th scope="col">Title</th><th scope="col">Status</th><th scope="col">Upvotes</th><th scope="col">Actions</th></tr></thead>
+        <tbody>
+        {% for p in posts %}
+          <tr data-id="{{ p.id }}">
+            <th scope="row">{{ p.title }}</th>
+            <td>{{ p.status.value }}</td>
+            <td>{{ p.upvotes }}</td>
+            <td class="admin-table__actions">
+              <a class="btn btn--secondary btn--sm" href="/admin/posts/{{ p.id }}/edit">Edit</a>
+              <form action="/admin/posts/{{ p.id }}/delete" method="post" data-ajax="post-delete" data-confirm="Delete this post? It will be hidden from readers.">
+                <input type="hidden" name="_csrf" value="{{ csrf }}">
+                <button class="btn btn--secondary btn--sm" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4">No posts yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if nextBefore %}<p><a class="link" href="/admin?before={{ nextBefore|url_encode }}">Older</a></p>{% endif %}
+  </div>
+</section>
+{% endblock %}

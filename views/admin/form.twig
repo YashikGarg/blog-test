@@ -1,0 +1,51 @@
+{% extends 'layout.twig' %}
+{% block title %}{{ post ? 'Edit post' : 'New post' }}: Inkwell{% endblock %}
+{% block content %}
+<section class="page">
+  <div class="wrap narrow-wide">
+    <h1>{{ post ? 'Edit post' : 'New post' }}</h1>
+    <form action="{{ post ? '/admin/posts/' ~ post.id : '/admin/posts' }}" method="post" enctype="multipart/form-data" data-ajax="form" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <div class="field">
+        <label for="title">Title</label>
+        <input id="title" name="title" type="text" value="{{ old.title|default('') }}" maxlength="200" required aria-describedby="title-err"{% if errors.title|default('') %} aria-invalid="true"{% endif %}>
+        <p class="field__error" id="title-err" data-error-for="title"{% if not errors.title|default('') %} hidden{% endif %}>{{ errors.title|default('') }}</p>
+      </div>
+      <div class="field">
+        <label for="excerpt">Summary (optional, shown on the card)</label>
+        <input id="excerpt" name="excerpt" type="text" value="{{ old.excerpt|default('') }}" maxlength="300" aria-describedby="excerpt-err"{% if errors.excerpt|default('') %} aria-invalid="true"{% endif %}>
+        <p class="field__error" id="excerpt-err" data-error-for="excerpt"{% if not errors.excerpt|default('') %} hidden{% endif %}>{{ errors.excerpt|default('') }}</p>
+      </div>
+      <div class="field">
+        <label for="body">Body (Markdown)</label>
+        <textarea id="body" name="body" class="textarea-tall" required aria-describedby="body-err"{% if errors.body|default('') %} aria-invalid="true"{% endif %}>{{ old.body|default('') }}</textarea>
+        <p class="field__error" id="body-err" data-error-for="body"{% if not errors.body|default('') %} hidden{% endif %}>{{ errors.body|default('') }}</p>
+      </div>
+      <div class="field">
+        <label for="media">Insert an image into the body</label>
+        <input id="media" type="file" accept="image/*" data-media-upload aria-describedby="media-err">
+        <p class="field__error" id="media-err" data-error-for="file" hidden></p>
+      </div>
+      <div class="field">
+        <label for="cover">Cover image</label>
+        <input id="cover" name="cover" type="file" accept="image/*" data-cover-preview aria-describedby="cover-err"{% if errors.cover|default('') %} aria-invalid="true"{% endif %}>
+        <p class="field__error" id="cover-err" data-error-for="cover"{% if not errors.cover|default('') %} hidden{% endif %}>{{ errors.cover|default('') }}</p>
+        <img id="cover-preview" class="cover-preview" alt="Cover preview" width="320" height="180"{% if post and post.coverImage %} src="{{ post.coverImage }}"{% else %} hidden{% endif %}>
+      </div>
+      <div class="field">
+        <label for="status">Status</label>
+        <select id="status" name="status" aria-describedby="status-err"{% if errors.status|default('') %} aria-invalid="true"{% endif %}>
+          <option value="draft"{% if old.status|default('draft') == 'draft' %} selected{% endif %}>Draft</option>
+          <option value="published"{% if old.status|default('draft') == 'published' %} selected{% endif %}>Published</option>
+        </select>
+        <p class="field__error" id="status-err" data-error-for="status"{% if not errors.status|default('') %} hidden{% endif %}>{{ errors.status|default('') }}</p>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn--primary" type="submit">Save post</button>
+        <a class="btn btn--secondary" href="/admin">Cancel</a>
+      </div>
+      <p class="form__status" role="status" data-form-status>{{ errors._form|default('') }}</p>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,14 @@
+vendor/
+node_modules/
+var/
+.env.local
+.env.dev
+.env.prod
+public/uploads/*
+!public/uploads/.htaccess
+public/assets/app.js
+tests/_scratch/
+.idea/
+.phpunit.result.cache
+shots/
+.taste-skill/chrome-*
