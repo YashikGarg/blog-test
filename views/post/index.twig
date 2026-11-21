@@ -3,9 +3,7 @@
 
 {% macro card(p, first) %}
 <a class="tile post-card" href="/posts/{{ p.slug }}">
-  {% if p.coverImage %}
-  <div class="tile__media"><img src="{{ p.coverImage }}" alt="" width="640" height="480" {% if first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}></div>
-  {% endif %}
+  <div class="tile__media"><img src="{{ p.coverImage ?: defaultCover }}" alt="" width="640" height="480" {% if first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}></div>
   <div class="tile__head"><h2 class="t-card">{{ p.title }}</h2></div>
   <p class="tile__facts">{{ p.authorName }} · {{ p.publishedAt }} · {{ p.upvotes }} upvotes</p>
   {% if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}
@@ -46,7 +44,7 @@
 
 <template id="card-tpl">
   <a class="tile post-card" href="/">
-    <div class="tile__media" hidden><img src="" alt="" width="640" height="480" loading="lazy"></div>
+    <div class="tile__media"><img src="" alt="" width="640" height="480" loading="lazy"></div>
     <div class="tile__head"><h2 class="t-card"></h2></div>
     <p class="tile__facts"></p>
     <p class="post-card__excerpt"></p>

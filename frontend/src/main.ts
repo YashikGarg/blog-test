@@ -2,10 +2,10 @@
 import {
   HttpError,
   ValidationError,
+  defaultCover,
   isCommentResult,
   isDeleted,
   isInternalPath,
-  isMediaResult,
   isPostPage,
   isRedirect,
   isVoteResult,
@@ -183,12 +183,8 @@ function buildCard(p: PostCard): HTMLElement | null {
   }
   const media = card.querySelector<HTMLElement>('.tile__media');
   const img = media?.querySelector('img');
-  if (p.coverImage !== null && isInternalPath(p.coverImage) && media && img) {
-    img.setAttribute('src', p.coverImage);
-    media.hidden = false;
-  } else {
-    media?.remove();
-  }
+  const cover = p.coverImage !== null && isInternalPath(p.coverImage) ? p.coverImage : defaultCover();
+  if (media && img && cover !== '') img.setAttribute('src', cover);
   return card;
 }
 
@@ -374,28 +370,13 @@ document.addEventListener('change', (event) => {
     reader.readAsDataURL(file);
   }
 
-  if (input.matches('[data-media-upload]')) void uploadMedia(input);
-});
-
-async function uploadMedia(input: HTMLInputElement): Promise<void> {
-  const file = input.files?.[0];
-  const form = input.form;
-  const textarea = byId('body', HTMLTextAreaElement);
-  if (!file || form === null || textarea === null) return;
-
-  form.querySelectorAll<HTMLElement>('[data-error-for="file"]').forEach(clearFieldError);
-  const body = new FormData();
-  body.append('file', file);
-  try {
-    const r = await send('/admin/media', { method: 'POST', body }, isMediaResult);
-    const at = textarea.selectionStart;
-    textarea.setRangeText(r.markdown, at, textarea.selectionEnd, 'end');
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    input.value = '';
-  } catch (err) {
-    showError(form, err);
+  if (input.matches('[data-remove-cover]')) {
+    const preview = byId('cover-preview', HTMLImageElement);
+    const src = input.checked ? preview?.dataset['defaultSrc'] : preview?.dataset['currentSrc'];
+    if (preview && src !== undefined && isInternalPath(src)) preview.setAttribute('src', src);
   }
-}
+
+});
 
 // Fields start at aria-invalid="false" (an unset attribute is announced as "invalid" by some readers).
 document.querySelectorAll('input, select, textarea').forEach((el) => {

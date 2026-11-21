@@ -166,12 +166,13 @@ final readonly class PdoPostRepository implements PostRepositoryInterface
         ]);
     }
 
-    public function softDelete(string $id): bool
+    public function softDelete(string $id, string $deletedBy): bool
     {
         $stmt = $this->pdo->prepare(
-            "UPDATE posts SET status = 'deleted', deleted_at = UTC_TIMESTAMP() WHERE id = UUID_TO_BIN(:id) AND status <> 'deleted'"
+            "UPDATE posts SET status = 'deleted', deleted_at = UTC_TIMESTAMP(), deleted_by = UUID_TO_BIN(:by)
+              WHERE id = UUID_TO_BIN(:id) AND status <> 'deleted'"
         );
-        $stmt->execute(['id' => $id]);
+        $stmt->execute(['by' => $deletedBy, 'id' => $id]);
 
         return $stmt->rowCount() === 1;
     }

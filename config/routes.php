@@ -34,4 +34,5 @@ return static function ($r): void {
     $r->addRoute('POST', '/admin/posts/{id:' . UUID . '}', [AdminPostController::class, 'update', Role::Admin]);
     $r->addRoute('POST', '/admin/posts/{id:' . UUID . '}/delete', [AdminPostController::class, 'destroy', Role::Admin]);
     $r->addRoute('POST', '/admin/media', [AdminPostController::class, 'uploadMedia', Role::Admin]);
+    $r->addRoute('POST', '/admin/preview', [AdminPostController::class, 'preview', Role::Admin]);
 };

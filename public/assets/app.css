@@ -108,3 +108,11 @@ dialog .btn-row { display: flex; gap: var(--s-3); justify-content: flex-end; fle
 .prose :is(ul, ol) { list-style: revert; padding-inline-start: var(--s-5); }
 .prose li + li { margin-top: var(--s-2); }
 .prose blockquote { margin-inline: 0; padding-inline-start: var(--s-4); border-inline-start: 2px solid var(--line-strong); color: var(--muted); }
+
+/* EasyMDE: match the form tokens; side-by-side is too narrow on phones. */
+.EasyMDEContainer .CodeMirror, .editor-toolbar { border-color: var(--line); }
+.EasyMDEContainer .CodeMirror { border-radius: 0 0 var(--r-md) var(--r-md); font: inherit; font-size: max(1rem, 1em); } /* ≥16px: iOS does not zoom */
+.editor-toolbar { border-radius: var(--r-md) var(--r-md) 0 0; }
+.EasyMDEContainer .editor-toolbar button { min-width: 44px; min-height: 44px; } /* one class more than EasyMDE's own min-width:30px, which loads after this file */
+@media (max-width: 767px) { .editor-toolbar .side-by-side, .editor-toolbar .fullscreen { display: none; } }
+.EasyMDEContainer .prose { margin-block: 0; } /* the preview pane covers the editor exactly; the page's .prose spacing would push it down */

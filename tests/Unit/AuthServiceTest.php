@@ -14,6 +14,7 @@ use App\Service\LoginThrottle;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Psr\Clock\ClockInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Clock\MockClock;
 
@@ -42,6 +43,21 @@ final class AuthServiceTest extends TestCase
         $errors = $this->errorsFrom(static fn () => $service->login('ann@example.com', 'wrong-pass', '127.0.0.1'));
 
         self::assertSame(['_form' => 'Email or password is incorrect'], $errors);
+    }
+
+    public function test_login_is_refused_while_ip_is_locked_even_with_correct_password(): void
+    {
+        $clock = new MockClock('2026-01-01 12:00:00');
+        $attempts = $this->createStub(LoginAttemptRepositoryInterface::class);
+        $attempts->method('acquire')->willReturn(true);
+        $attempts->method('lockedUntil')->willReturnMap([[sha1('ip:127.0.0.1'), $clock->now()->modify('+10 minutes')]]);
+        $users = $this->createStub(UserRepositoryInterface::class);
+        $users->method('findByEmail')->willReturn($this->user('correct-pass-1'));
+        $service = $this->service($users, $attempts, $clock);
+
+        $errors = $this->errorsFrom(static fn () => $service->login('ann@example.com', 'correct-pass-1', '127.0.0.1'));
+
+        self::assertStringStartsWith('Too many attempts', $errors['_form']);
     }
 
     public function test_register_rejects_password_not_matching_policy(): void
@@ -79,14 +95,18 @@ final class AuthServiceTest extends TestCase
         self::fail('Expected ValidationException');
     }
 
-    private function service(UserRepositoryInterface $users): AuthService
+    private function service(UserRepositoryInterface $users, ?LoginAttemptRepositoryInterface $attempts = null, ?ClockInterface $clock = null): AuthService
     {
-        $attempts = $this->createStub(LoginAttemptRepositoryInterface::class);
-        $attempts->method('acquire')->willReturn(true);
-        $attempts->method('lockedUntil')->willReturn(null);
-        $throttle = new LoginThrottle($attempts, new MockClock(), 5, 60, 7200);
+        $clock ??= new MockClock();
+        if ($attempts === null) {
+            $attempts = $this->createStub(LoginAttemptRepositoryInterface::class);
+            $attempts->method('acquire')->willReturn(true);
+            $attempts->method('lockedUntil')->willReturn(null);
+        }
+        $accountThrottle = new LoginThrottle($attempts, $clock, 5, 60, 7200);
+        $ipThrottle = new LoginThrottle($attempts, $clock, 20, 60, 7200);
 
-        return new AuthService($users, $throttle, new NullLogger(), '/^.{8,}$/', 'at least 8 characters');
+        return new AuthService($users, $accountThrottle, $ipThrottle, new NullLogger(), '/^.{8,}$/', 'at least 8 characters');
     }
 
     private function user(string $password): User

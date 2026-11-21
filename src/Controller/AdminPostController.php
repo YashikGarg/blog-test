@@ -15,7 +15,7 @@ use Twig\Environment;
 
 final class AdminPostController extends BaseController
 {
-    private const FIELDS = ['title', 'body', 'status', 'excerpt'];
+    private const FIELDS = ['title', 'body', 'status', 'excerpt', 'remove_cover'];
 
     public function __construct(
         Environment $twig,
@@ -87,9 +87,21 @@ final class AdminPostController extends BaseController
     public function destroy(ServerRequestInterface $request, array $vars): ResponseInterface
     {
         $id = $this->uuid($vars);
-        $this->posts->delete($id);
+        $this->posts->delete($id, $this->userId());
 
         return $this->respond($request, ['id' => $id], '/admin', 'Post deleted');
+    }
+
+    /** @param array<string,string> $vars */
+    public function preview(ServerRequestInterface $request, array $vars): ResponseInterface
+    {
+        try {
+            $input = $this->body($request, ['body']);
+        } catch (ValidationException $e) {
+            return $this->respondInvalid($request, $e, null, [], '/admin');
+        }
+
+        return $this->json(['ok' => true, 'html' => $this->posts->preview($input['body'])]);
     }
 
     /** @param array<string,string> $vars */

@@ -84,23 +84,27 @@ final readonly class PostService
         $existing = $this->getForEdit($id);
         $data = $this->validate($input);
         $newCover = $this->hasUpload($cover) ? $this->uploader->store($cover) : null;
+        $removeCover = ($input['remove_cover'] ?? '') === '1';
 
         $this->posts->update($id, $data + [
-            'cover_image' => $newCover ?? $existing->coverImage,
+            // A new upload wins over the checkbox. Old files stay on disk (they are never deleted).
+            'cover_image' => $newCover ?? ($removeCover ? null : $existing->coverImage),
             // Set the first time the post is published, then kept.
             'published_at' => $existing->publishedAt
                 ?? ($data['status'] === PostStatus::Published->value ? gmdate('Y-m-d H:i:s') : null),
         ]);
+    }
 
-        if ($newCover !== null && $existing->coverImage !== null) {
-            $this->uploader->delete($existing->coverImage);
-        }
+    /** Admin editor preview: the same CommonMark as the post page, never cached. */
+    public function preview(string $markdown): string
+    {
+        return $this->markdown->render($markdown, null);
     }
 
     /** Soft delete. The cover file is kept so the post stays restorable. */
-    public function delete(string $id): void
+    public function delete(string $id, string $actorId): void
     {
-        if (!$this->posts->softDelete($id)) {
+        if (!$this->posts->softDelete($id, $actorId)) {
             throw new NotFoundException('Post not found');
         }
     }

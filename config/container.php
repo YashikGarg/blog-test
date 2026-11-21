@@ -69,12 +69,16 @@ function buildContainer(array $settings): ContainerInterface
 
         Environment::class => factory(function (ContainerInterface $c) {
             $s = $c->get('settings');
-            return new Environment(new FilesystemLoader($s['root'] . '/views'), [
+            $twig = new Environment(new FilesystemLoader($s['root'] . '/views'), [
                 'autoescape' => 'html',
                 'cache' => $s['twig_cache'],
                 'strict_variables' => $s['debug'],
                 'debug' => $s['debug'],
             ]);
+            $twig->addGlobal('defaultCover', $s['upload']['default_cover']);
+            $twig->addGlobal('uploadMaxBytes', $s['upload']['max_bytes']);
+
+            return $twig;
         }),
 
         CacheInterface::class => factory(function (ContainerInterface $c) {
@@ -113,17 +117,25 @@ function buildContainer(array $settings): ContainerInterface
             $c->get('settings')['cache']['ttl'],
         )),
 
-        LoginThrottle::class => factory(fn(ContainerInterface $c) => new LoginThrottle(
+        'throttle.account' => factory(fn(ContainerInterface $c) => new LoginThrottle(
             $c->get(LoginAttemptRepositoryInterface::class),
             $c->get(ClockInterface::class),
             $c->get('settings')['login']['free_attempts'],
             $c->get('settings')['login']['base_seconds'],
             $c->get('settings')['login']['max_seconds'],
         )),
+        'throttle.ip' => factory(fn(ContainerInterface $c) => new LoginThrottle(
+            $c->get(LoginAttemptRepositoryInterface::class),
+            $c->get(ClockInterface::class),
+            $c->get('settings')['login']['ip_free_attempts'],
+            $c->get('settings')['login']['base_seconds'],
+            $c->get('settings')['login']['max_seconds'],
+        )),
 
         AuthService::class => factory(fn(ContainerInterface $c) => new AuthService(
             $c->get(UserRepositoryInterface::class),
-            $c->get(LoginThrottle::class),
+            $c->get('throttle.account'),
+            $c->get('throttle.ip'),
             $c->get(LoggerInterface::class),
             $c->get('settings')['password']['regex'],
             $c->get('settings')['password']['hint'],

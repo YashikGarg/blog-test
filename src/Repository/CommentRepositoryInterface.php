@@ -18,5 +18,6 @@ interface CommentRepositoryInterface
 
     public function update(string $id, string $body): void;
 
-    public function softDelete(string $id): void;
+    /** Soft delete; $deletedBy is the acting user (owner or admin). */
+    public function softDelete(string $id, string $deletedBy): void;
 }

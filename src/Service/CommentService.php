@@ -59,7 +59,7 @@ final readonly class CommentService
         if ($comment->userId !== $actorId && !$actorRole->satisfies(Role::Admin)) {
             throw new ForbiddenException();
         }
-        $this->comments->softDelete($commentId);
+        $this->comments->softDelete($commentId, $actorId);
 
         return $comment;
     }

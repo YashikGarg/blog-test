@@ -84,7 +84,7 @@ final class CommentServiceTest extends TestCase
     {
         $comments = $this->createMock(CommentRepositoryInterface::class);
         $comments->method('findVisibleById')->willReturn($this->comment('owner'));
-        $comments->expects(self::once())->method('softDelete')->with('c-1');
+        $comments->expects(self::once())->method('softDelete')->with('c-1', 'admin-1');
         $service = new CommentService($comments, $this->createStub(PostRepositoryInterface::class), 1000);
 
         $service->delete('c-1', 'admin-1', Role::Admin);

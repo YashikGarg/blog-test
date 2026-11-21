@@ -5,9 +5,7 @@
 {% block content %}
 <article class="page">
   <div class="wrap article">
-    {% if post.coverImage %}
-      <img class="article__cover" src="{{ post.coverImage }}" alt="" width="1200" height="630" fetchpriority="high">
-    {% endif %}
+    <img class="article__cover" src="{{ post.coverImage ?: defaultCover }}" alt="" width="1200" height="630" fetchpriority="high">
     <h1>{{ post.title }}</h1>
     <p class="t-small muted">{{ post.authorName }} · {{ post.publishedAt }}</p>
 

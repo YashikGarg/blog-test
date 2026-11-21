@@ -1,5 +1,10 @@
 {% extends 'layout.twig' %}
 {% block title %}{{ post ? 'Edit post' : 'New post' }}: Inkwell{% endblock %}
+{% block head_extra %}
+  <link rel="stylesheet" href="/assets/editor.css">
+  <script type="module" src="/assets/editor.js"></script>
+{% endblock %}
+
 {% block content %}
 <section class="page">
   <div class="wrap narrow-wide">
@@ -17,20 +22,19 @@
         <p class="field__error" id="excerpt-err" data-error-for="excerpt"{% if not errors.excerpt|default('') %} hidden{% endif %}>{{ errors.excerpt|default('') }}</p>
       </div>
       <div class="field">
-        <label for="body">Body (Markdown)</label>
-        <textarea id="body" name="body" class="textarea-tall" required aria-describedby="body-err"{% if errors.body|default('') %} aria-invalid="true"{% endif %}>{{ old.body|default('') }}</textarea>
+        <label for="body" id="body-label">Body (Markdown)</label>
+        <textarea id="body" name="body" class="textarea-tall" required data-max-bytes="{{ uploadMaxBytes }}" aria-describedby="body-err"{% if errors.body|default('') %} aria-invalid="true"{% endif %}>{{ old.body|default('') }}</textarea>
         <p class="field__error" id="body-err" data-error-for="body"{% if not errors.body|default('') %} hidden{% endif %}>{{ errors.body|default('') }}</p>
-      </div>
-      <div class="field">
-        <label for="media">Insert an image into the body</label>
-        <input id="media" type="file" accept="image/*" data-media-upload aria-describedby="media-err">
-        <p class="field__error" id="media-err" data-error-for="file" hidden></p>
       </div>
       <div class="field">
         <label for="cover">Cover image</label>
         <input id="cover" name="cover" type="file" accept="image/*" data-cover-preview aria-describedby="cover-err"{% if errors.cover|default('') %} aria-invalid="true"{% endif %}>
         <p class="field__error" id="cover-err" data-error-for="cover"{% if not errors.cover|default('') %} hidden{% endif %}>{{ errors.cover|default('') }}</p>
-        <img id="cover-preview" class="cover-preview" alt="Cover preview" width="320" height="180"{% if post and post.coverImage %} src="{{ post.coverImage }}"{% else %} hidden{% endif %}>
+        {% set coverSrc = post and post.coverImage ? post.coverImage : defaultCover %}
+        <img id="cover-preview" class="cover-preview" alt="Cover preview" width="320" height="180" src="{{ coverSrc }}" data-default-src="{{ defaultCover }}" data-current-src="{{ coverSrc }}">
+        {% if post and post.coverImage %}
+        <label><input type="checkbox" name="remove_cover" value="1" data-remove-cover> Remove the cover (the default image is shown instead)</label>
+        {% endif %}
       </div>
       <div class="field">
         <label for="status">Status</label>

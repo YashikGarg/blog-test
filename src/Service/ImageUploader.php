@@ -48,16 +48,4 @@ final readonly class ImageUploader
 
         return $this->publicPrefix . $name;
     }
-
-    public function delete(string $publicPath): void
-    {
-        if (!str_starts_with($publicPath, $this->publicPrefix)) {
-            return;
-        }
-        // basename() only: ../ can't escape the upload dir.
-        $file = $this->uploadDir . '/' . basename($publicPath);
-        if (is_file($file)) {
-            unlink($file);
-        }
-    }
 }

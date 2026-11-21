@@ -7,6 +7,7 @@
   <meta name="page-type" content="service">
   <meta name="site-kind" content="other">
   <meta name="csrf-token" content="{{ csrf }}">
+  <meta name="default-cover" content="{{ defaultCover }}">
   <title>{% block title %}Inkwell: a simple blog{% endblock %}</title>
   <meta name="description" content="{% block description %}Inkwell is a simple blog. Read posts, search them, and log in to comment and upvote.{% endblock %}">
   <meta name="theme-color" content="#f7f3ec">
@@ -18,6 +19,7 @@
   <script type="module" src="/assets/vendor/taste/system.js"></script>
   <script type="module" src="/assets/vendor/taste/motion.js"></script>
   <script type="module" src="/assets/app.js"></script>
+  {% block head_extra %}{% endblock %}
 </head>
 <body>
 <header class="nav">

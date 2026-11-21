@@ -57,10 +57,11 @@ final readonly class PdoCommentRepository implements CommentRepositoryInterface
             ->execute(['body' => $body, 'id' => $id]);
     }
 
-    public function softDelete(string $id): void
+    public function softDelete(string $id, string $deletedBy): void
     {
         $this->pdo->prepare(
-            "UPDATE comments SET status = 'deleted', deleted_at = UTC_TIMESTAMP() WHERE id = UUID_TO_BIN(:id) AND status = 'visible'"
-        )->execute(['id' => $id]);
+            "UPDATE comments SET status = 'deleted', deleted_at = UTC_TIMESTAMP(), deleted_by = UUID_TO_BIN(:by)
+              WHERE id = UUID_TO_BIN(:id) AND status = 'visible'"
+        )->execute(['by' => $deletedBy, 'id' => $id]);
     }
 }

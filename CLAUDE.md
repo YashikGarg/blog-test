@@ -117,6 +117,8 @@ Use well-known Composer or npm packages for infrastructure: env, routing, DI, PS
 - **Limit the blast radius.** The app DB user has no DELETE and no DDL rights. The MCP tools accept whitelisted query **names**, never raw SQL.
 - **Review:** run `acc:check-sql-injection` on `src/Repository`, and `grep -nE '(query|exec|prepare)\(.*\$' src/` must show only static SQL. Manual probe: searching `' OR 1=1 -- ` returns ordinary "no results", not every row and not an error.
 - **XSS**: Twig autoescape on. Markdown goes through league/commonmark with `html_input: 'escape'` and `allow_unsafe_links: false`. The only `|raw` allowed is that rendered markdown. TS writes `textContent`, never `innerHTML` with data. **The one exception** is the admin editor preview: it puts the HTML returned by `POST /admin/preview` into the preview element with `innerHTML`. That HTML comes from the same CommonMark config, so it is exactly what `|raw` prints on the post page. Markdown is never rendered in the browser.
+  - Where the browser has the Sanitizer API, insert it with `setHTML()` and an **explicit allow-list** of the elements CommonMark outputs, with `img` limited to `src`, `alt` and `title`. The default Sanitizer removes every `<img>` (verified in Chrome 157).
+  - Elsewhere (Safari), fall back to `innerHTML`. That is still safe, because the server escapes raw HTML and the CSP blocks inline handlers.
 ### CSRF protection (OWASP A01)
 - **Synchronizer token.** Each session gets a 32-byte token (`bin2hex(random_bytes(32))`). It is **rotated on login and logout** together with `session_regenerate_id(true)`.
 - **Sent on every state change.** Every HTML form carries a hidden `_csrf` field. Every fetch/AJAX call sends `X-CSRF-Token`, read from `<meta name="csrf-token">` by the one TS fetch helper.
@@ -498,11 +500,29 @@ composer serve                       # php -S localhost:8000 -t public public/in
   1. The markdown cache key uses `posts.updated_at` at one-second precision, so two saves within one second show the older render. Fix: key on a hash of `body_md`.
   2. `uniqueSlug` checks and then inserts, so two same-title posts saved at the same moment give a 1062 → 500. Fix: catch 1062 and retry with the next suffix.
   3. The §A3 diagram still shows `Error → SecurityHeaders`; the code (and the entry above) has SecurityHeaders outermost.
-- 2026-11-21 (user approved; **planned, see `docs/CHANGES_002.md`**, status: not implemented yet): change set 002.
+- 2026-11-21 (user approved; **done**, see `docs/CHANGES_002.md`): change set 002. The implementation result and the two deviations are the last bullets of this entry.
   1. **Markdown editor:** EasyMDE 2.21.0 plus Font Awesome 4.7 icons, bundled by esbuild and loaded only on the admin post form.
      - Checked: the bundle builds (editor.js about 341 KB) and typechecks once `noUncheckedSideEffectImports: false` is set.
      - CDN features (Font Awesome download, spell checker, guide) and `previewImagesInEditor` (it writes `style=""`) are turned off for the CSP.
      - The separate "insert image" field is replaced by the editor's upload, which still goes through `/admin/media`.
+     - **Skill review of the plan** (`acc:check-output-encoding`, `acc:check-dependency-vulnerabilities`):
+       - `npm audit --omit=dev` on easymde 2.21.0 + font-awesome 4.7.0 (resolves codemirror 5.65.21, marked 4.3.0, codemirror-spell-checker 1.1.2) found 0 vulnerabilities.
+       - Fix added: EasyMDE's default `errorCallback` is `alert()` (also for "file too large", with the file name), so the plan sets `errorCallback` to write `#body-err` with `textContent`.
+       - The plan's exact `editor.ts` was typechecked and bundled.
+       - Accepted: `marked` is old but unused (the preview goes to the server), and CodeMirror 5 and Font Awesome 4 are in maintenance with no advisories.
+     - **`modern-web-guidance` review** (`sanitize-untrusted-html`, `accessible-error-announcement`, `forms`). The user approved 3 of 4 fixes:
+       - (a) The editor is named by the visible label (`aria-labelledby="body-label"`). `aria-invalid` and the `aria-describedby` error link are set only while `#body-err` shows. After a failed save, focus moves into the editor unless an earlier field already has it. The font size is ≥ 16 px, so iOS doesn't zoom.
+       - (b) Upload errors go to the form's `role="status"` line.
+       - (c) The preview uses `setHTML()` with a CommonMark allow-list, falling back to `innerHTML`.
+       - **Declined:** a DOMPurify fallback for Safari.
+       - The plan's `editor.ts` passed 16/16 checks in headless Chrome 157 under the app's CSP, with fake endpoints.
+       - Finding: the default Sanitizer drops every `<img>`, so the allow-list is required.
+       - Chrome logs a `script-src-attr` report while parsing HTML that contains an inline handler, even inside `setHTML`. Nothing runs, and our server output never contains one.
+     - **Current frontend smoke test** (headless Chrome against the running app, 29 checks at 390 and 1440 px):
+       - No CSP violations, JS errors or horizontal scroll, and tap targets are ≥ 44 px.
+       - Search, register-422 (with focus and `aria-invalid`), login, vote, comment add/edit/delete (with the `<dialog>` confirm) and logout all work by AJAX with no page reload.
+       - The test comments and vote were deleted afterwards, and `verify_vote_counts` returned `[]`.
+       - Noted (same cause as deferred item 1): a comment edited within the same second it was created shows no "edited" label, because `updated_at` has one-second precision.
   2. **Preview:** `POST /admin/preview` renders with the server's CommonMark (not cached), so the preview matches the live page. This is the only TS `innerHTML` (A7/A9 updated). Picked over rendering markdown in the browser.
   3. **`deleted_by`** on posts and comments (migration 002). Verified on a scratch DB in Docker: it applies while a legacy deleted row exists; the owner and admin deletes are recorded; the CHECK (3819) and FK (1452) reject bad rows; the comment-list index is unchanged. NULL means the row was deleted before 002. `verify_constraints` goes to 15 cases.
   4. **Per-IP login limit** (closes "IP X locked on account A moves on to account B"; supersedes declined security #3): a `sha1('ip:'+ip)` counter with `LOGIN_IP_FREE_ATTEMPTS=20`, the same backoff, and never reset by a success. `GET_LOCK` is taken on the IP key, then the account key (two named locks per session verified as `inkwell_app`).
@@ -514,3 +534,11 @@ composer serve                       # php -S localhost:8000 -t public public/in
      - A post with no cover shows the user's image, moved from `public/uploads/default.jpg` to `public/assets/default-cover.jpg` (`DEFAULT_COVER`, a Twig global plus a meta tag for AJAX cards). `cover_image` stays NULL in the DB.
   6. **Last login IP/user in `login_attempts`: declined** (user agreed). The counter table keeps one row per key, so it would be a poor history. Failed logins and lockouts are already logged with `ip` and `user_id` (A09).
   - **Tests:** 22 → 24 (an IP lock refuses even a correct password; remove-cover clears the cover and keeps the file). The `CommentServiceTest` admin-delete test now also checks `deleted_by`.
+  - **Implementation result (all 6 sections, in order):** migration `002_deleted_by` applied (second run applies nothing); `composer test` 24 green; `npm run typecheck`, `npm run build` (`app.js`, `editor.js`, `editor.css`, `editor-assets/`), `composer audit` and `npm audit --omit=dev` clean; no `unlink(` or `uploader->delete` in `src/`; in TS `innerHTML` appears only in `editor.ts`'s `showPreview()` fallback; new files are exactly `002_deleted_by.sql`, `editor.ts` and `default-cover.jpg`.
+    - **DB:** `verify_constraints` 15/15 PASS and `verify_vote_counts` `[]` (run through `DevTools` directly; re-run through the live MCP tools after the server reconnects); `explain_query comments_for_post` still uses `idx_comments_post_status_created`; `list_routes` shows `POST /admin/preview`, admin; owner and admin comment deletes record their own ids in `deleted_by` (the one older deleted row stays NULL, as designed).
+    - **Per-IP limit** (real HTTP, 4 failures on each of 5 emails from one IP): the IP counter went 4, 8, 12, 16, 20 and locked at 20 while no account key locked; the attacker's own successful login left it unchanged; a 6th email and the correct admin password were both refused; `auth.ip_locked` was logged. The new unit test fails when the IP lock is ignored (mutation check).
+    - **Browser** (headless Chrome, 1440 px: 31 checks, 390 px: 32 checks): the editor mounts with bundled icons and no CSP violations; Preview and Side-by-side show the server HTML (`<script>` stays inert text, the image is kept); an image paste uploads and inserts `![](/uploads/…)`; a non-image upload shows its error in the status line with no `alert()`; an empty-body save sets `aria-invalid`, links `#body-err` and moves focus into the editor; a post without a cover shows `/assets/default-cover.jpg` on the list, the post page and AJAX "Older posts" cards while `cover_image` stays NULL; "Remove cover" clears the cover and the old file stays on disk; deleting a post from the admin list records the admin in `deleted_by`.
+  - **Deviations from the change set (both CSS, in `app.css`; the design did not change):**
+    1. The toolbar rule is `.EasyMDEContainer .editor-toolbar button { min-width: 44px; … }`, one class more than written. EasyMDE's own `min-width: 30px` has the same specificity and `editor.css` loads after `app.css`, so the written rule left nine toolbar buttons 30 px wide on phones. Now measured at 44 px.
+    2. Added `.EasyMDEContainer .prose { margin-block: 0; }`. The preview pane carries the page's `.prose` class (`previewClass`), whose 32 px margin pushed the absolutely positioned preview down and showed the editor text under it.
+  - **Unchanged:** B1–B8 already match what was built. The A3 diagram still shows `Error → SecurityHeaders` (deferred item 3 above).

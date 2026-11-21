@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild frontend/src/main.ts --bundle --minify --format=esm --target=es2022 --outfile=public/assets/app.js",
+    "build": "npm run build:app && npm run build:editor",
+    "build:app": "esbuild frontend/src/main.ts --bundle --minify --format=esm --target=es2022 --outfile=public/assets/app.js",
+    "build:editor": "esbuild frontend/src/editor.ts --bundle --minify --format=esm --target=es2022 --outfile=public/assets/editor.js --loader:.woff2=file --loader:.woff=file --loader:.ttf=file --loader:.eot=file --loader:.svg=file '--asset-names=editor-assets/[name]-[hash]'",
     "watch": "esbuild frontend/src/main.ts --bundle --format=esm --target=es2022 --outfile=public/assets/app.js --watch",
     "typecheck": "tsc --noEmit"
   },
@@ -11,5 +13,9 @@
     "@fontsource-variable/schibsted-grotesk": "^5.3.0",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "easymde": "2.21.0",
+    "font-awesome": "4.7.0"
   }
 }

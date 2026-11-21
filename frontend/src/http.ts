@@ -91,8 +91,18 @@ export const isPostPage: Guard<PostPage> = (v): v is PostPage =>
 export const isMediaResult: Guard<MediaResult> = (v): v is MediaResult =>
   isRecord(v) && v['ok'] === true && typeof v['url'] === 'string' && typeof v['markdown'] === 'string';
 
+export interface PreviewResult { ok: true; html: string }
+export const isPreviewResult: Guard<PreviewResult> = (v): v is PreviewResult =>
+  isRecord(v) && v['ok'] === true && typeof v['html'] === 'string';
+
 export const isRedirect: Guard<Redirect> = (v): v is Redirect =>
   isRecord(v) && v['ok'] === true && typeof v['redirect'] === 'string';
+
+/** The default cover path from <meta name="default-cover">; empty when missing or not an internal path. */
+export const defaultCover = (): string => {
+  const v = document.querySelector('meta[name="default-cover"]')?.getAttribute('content') ?? '';
+  return isInternalPath(v) ? v : '';
+};
 
 function csrfToken(): string {
   return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';

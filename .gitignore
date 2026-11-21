@@ -7,6 +7,9 @@ var/
 public/uploads/*
 !public/uploads/.htaccess
 public/assets/app.js
+public/assets/editor.js
+public/assets/editor.css
+public/assets/editor-assets/
 tests/_scratch/
 .idea/
 .phpunit.result.cache

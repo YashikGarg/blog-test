@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Exception\NotFoundException;
+use App\Model\Post;
+use App\Model\PostStatus;
 use App\Repository\PostRepositoryInterface;
 use App\Service\ImageUploader;
 use App\Service\MarkdownRendererInterface;
@@ -45,9 +47,50 @@ final class PostServiceTest extends TestCase
         $service->getPublishedBySlug('nope');
     }
 
-    private function service(PostRepositoryInterface $posts): PostService
+    public function test_update_with_remove_cover_clears_cover_and_keeps_file(): void
     {
-        $uploader = new ImageUploader(sys_get_temp_dir() . '/inkwell-unused', '/uploads/', 1048576, ['image/png']);
+        $dir = $this->tempDir();
+        file_put_contents($dir . '/old.png', 'png');
+        $posts = $this->createMock(PostRepositoryInterface::class);
+        $posts->method('findById')->willReturn($this->post('/uploads/old.png'));
+        $posts->expects(self::once())->method('update')
+            ->with('post-1', self::callback(static fn (array $data): bool => $data['cover_image'] === null));
+        $service = $this->service($posts, $dir);
+
+        $service->update('post-1', ['title' => 'T', 'body' => 'B', 'status' => 'draft', 'excerpt' => '', 'remove_cover' => '1'], null);
+
+        self::assertFileExists($dir . '/old.png');
+    }
+
+    protected function tearDown(): void
+    {
+        foreach ($this->tempDirs as $dir) {
+            array_map('unlink', glob($dir . '/*') ?: []);
+            rmdir($dir);
+        }
+        $this->tempDirs = [];
+    }
+
+    /** @var list<string> */
+    private array $tempDirs = [];
+
+    private function tempDir(): string
+    {
+        $dir = sys_get_temp_dir() . '/inkwell-' . bin2hex(random_bytes(6));
+        mkdir($dir);
+        $this->tempDirs[] = $dir;
+
+        return $dir;
+    }
+
+    private function post(?string $cover): Post
+    {
+        return new Post('post-1', 'a-1', 'Author', 'Title', 'title', '', 'body', $cover, PostStatus::Draft, 0, null, '2026-01-01 00:00:00');
+    }
+
+    private function service(PostRepositoryInterface $posts, ?string $uploadDir = null): PostService
+    {
+        $uploader = new ImageUploader($uploadDir ?? sys_get_temp_dir() . '/inkwell-unused', '/uploads/', 1048576, ['image/png']);
 
         return new PostService($posts, $this->createStub(MarkdownRendererInterface::class), $uploader, 10);
     }

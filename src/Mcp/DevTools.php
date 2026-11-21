@@ -76,7 +76,7 @@ final readonly class DevTools
         return $stmt->fetchAll();
     }
 
-    /** Runs 13 bad writes inside a transaction that is always rolled back. Each must fail with the expected error. */
+    /** Runs 15 bad writes inside a transaction that is always rolled back. Each must fail with the expected error. */
     public function verifyConstraints(): array
     {
         $user = $this->pdo->query('SELECT BIN_TO_UUID(id) AS id FROM users ORDER BY id LIMIT 1')->fetchColumn();
@@ -109,6 +109,8 @@ final readonly class DevTools
             [11, 'DELETE FROM posts', 'DELETE command denied', ['DELETE FROM posts WHERE 1 = 0', []]],
             [12, 'upvotes - 1 on a zero counter', 'out of range', ['UPDATE post_vote_counts SET upvotes = upvotes - 1 WHERE post_id = UUID_TO_BIN(:p)', []]],
             [13, 'counter row for unknown post', 'foreign key constraint fails', ['INSERT INTO post_vote_counts (post_id, upvotes) VALUES (UUID_TO_BIN(:p), 0)', ['p' => (string) Uuid::v7()]]],
+            [14, 'deleted_by on a visible comment', 'chk_comments_deleted_by', ['INSERT INTO comments (id, post_id, user_id, body, status, deleted_by) VALUES (UUID_TO_BIN(:id), UUID_TO_BIN(:p), UUID_TO_BIN(:u), \'x\', \'visible\', UUID_TO_BIN(:u2))', ['id' => (string) Uuid::v7(), 'p' => $post, 'u' => $user, 'u2' => $user]]],
+            [15, 'deleted_by unknown user', 'foreign key constraint fails', ['INSERT INTO posts (id, author_id, title, slug, body_md, status, deleted_at, deleted_by) VALUES (UUID_TO_BIN(:id), UUID_TO_BIN(:u), \'D\', :s, \'b\', \'deleted\', UTC_TIMESTAMP(), UUID_TO_BIN(:x))', ['id' => (string) Uuid::v7(), 'u' => $user, 's' => 'dby-' . bin2hex(random_bytes(6)), 'x' => (string) Uuid::v7()]]],
         ];
 
         $results = [];

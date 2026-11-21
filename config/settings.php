@@ -78,6 +78,7 @@ function settings(string $root): array
         ],
         'login' => [
             'free_attempts' => $int('LOGIN_FREE_ATTEMPTS', 5),
+            'ip_free_attempts' => $int('LOGIN_IP_FREE_ATTEMPTS', 20),
             'base_seconds' => $int('LOGIN_BACKOFF_BASE_SECONDS', 60),
             'max_seconds' => $int('LOGIN_BACKOFF_MAX_SECONDS', 7200),
         ],
@@ -86,6 +87,7 @@ function settings(string $root): array
             'mimes' => array_values(array_filter(array_map('trim', explode(',', $e('UPLOAD_ALLOWED_MIMES'))))),
             'dir' => $root . '/public/uploads',
             'prefix' => '/uploads/',
+            'default_cover' => $e('DEFAULT_COVER', '/assets/default-cover.jpg'),
         ],
         'cache' => [
             'driver' => $e('CACHE_DRIVER', 'filesystem'),

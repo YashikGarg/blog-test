@@ -19,7 +19,7 @@ final class CommonMarkRenderer implements MarkdownRendererInterface
         ]);
     }
 
-    public function render(string $markdown, string $cacheKey): string
+    public function render(string $markdown, ?string $cacheKey): string
     {
         return (string) $this->converter->convert($markdown);
     }

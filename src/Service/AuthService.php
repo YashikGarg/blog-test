@@ -18,7 +18,8 @@ final class AuthService
 
     public function __construct(
         private readonly UserRepositoryInterface $users,
-        private readonly LoginThrottle $throttle,
+        private readonly LoginThrottle $accountThrottle,
+        private readonly LoginThrottle $ipThrottle,
         private readonly LoggerInterface $logger,
         private readonly string $passwordRegex,
         private readonly string $passwordHint,
@@ -80,33 +81,45 @@ final class AuthService
         $key = $user !== null
             ? sha1('u:' . $user->id . '|' . $ip)
             : sha1('e:' . strtolower($email) . '|' . $ip);
+        $ipKey = sha1('ip:' . $ip);
 
-        // One attempt at a time per IP+account, so parallel guesses can't all pass the check first.
-        if (!$this->throttle->acquire($key, 5)) {
+        // One attempt at a time per IP, then per IP+account (fixed order: no deadlock), so parallel guesses can't pass the checks first.
+        if (!$this->ipThrottle->acquire($ipKey, 5)) {
             $this->logger->warning('login lock timeout', ['event' => 'auth.lock_timeout', 'ip' => $ip, 'user_id' => $user?->id]);
             throw new ValidationException(['_form' => 'Too many attempts at once, try again']);
         }
-
         try {
-            $wait = $this->throttle->retryAfter($key);
-            if ($wait > 0) {
-                $this->logger->warning('login locked', ['event' => 'auth.locked', 'ip' => $ip, 'user_id' => $user?->id]);
-                throw new ValidationException(['_form' => 'Too many attempts. Try again in ' . (int) ceil($wait / 60) . ' minutes.']);
+            if (!$this->accountThrottle->acquire($key, 5)) {
+                $this->logger->warning('login lock timeout', ['event' => 'auth.lock_timeout', 'ip' => $ip, 'user_id' => $user?->id]);
+                throw new ValidationException(['_form' => 'Too many attempts at once, try again']);
             }
+            try {
+                $ipWait = $this->ipThrottle->retryAfter($ipKey);
+                $wait = max($ipWait, $this->accountThrottle->retryAfter($key));
+                if ($wait > 0) {
+                    $event = $ipWait > 0 ? 'auth.ip_locked' : 'auth.locked';
+                    $this->logger->warning('login locked', ['event' => $event, 'ip' => $ip, 'user_id' => $user?->id]);
+                    throw new ValidationException(['_form' => 'Too many attempts. Try again in ' . (int) ceil($wait / 60) . ' minutes.']);
+                }
 
-            // Verify against a dummy hash when the user is missing, so timing doesn't reveal which emails exist.
-            $valid = password_verify($password, $user->passwordHash ?? self::DUMMY_HASH);
-            if ($user === null || !$valid) {
-                $this->throttle->recordFailure($key);
-                $this->logger->warning('login failed', ['event' => 'auth.login_failed', 'ip' => $ip, 'user_id' => $user?->id]);
-                throw new ValidationException(['_form' => self::GENERIC_LOGIN_ERROR]);
+                // Verify against a dummy hash when the user is missing, so timing doesn't reveal which emails exist.
+                $valid = password_verify($password, $user->passwordHash ?? self::DUMMY_HASH);
+                if ($user === null || !$valid) {
+                    $this->accountThrottle->recordFailure($key);
+                    $this->ipThrottle->recordFailure($ipKey);
+                    $this->logger->warning('login failed', ['event' => 'auth.login_failed', 'ip' => $ip, 'user_id' => $user?->id]);
+                    throw new ValidationException(['_form' => self::GENERIC_LOGIN_ERROR]);
+                }
+
+                // Only the account counter resets. The IP counter must not: an attacker could log into their own account to wipe it.
+                $this->accountThrottle->reset($key);
+
+                return $user;
+            } finally {
+                $this->accountThrottle->release($key);
             }
-
-            $this->throttle->reset($key);
-
-            return $user;
         } finally {
-            $this->throttle->release($key);
+            $this->ipThrottle->release($ipKey);
         }
     }
 

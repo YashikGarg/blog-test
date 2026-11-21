@@ -16,8 +16,13 @@ final readonly class CachedMarkdownRenderer implements MarkdownRendererInterface
     ) {
     }
 
-    public function render(string $markdown, string $cacheKey): string
+    public function render(string $markdown, ?string $cacheKey): string
     {
+        // A null key means "do not cache": previews are a new text on every keystroke and would fill the cache.
+        if ($cacheKey === null) {
+            return $this->inner->render($markdown, null);
+        }
+
         $cached = $this->cache->get($cacheKey);
         if (is_string($cached)) {
             return $cached;

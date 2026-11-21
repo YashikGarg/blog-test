@@ -43,6 +43,6 @@ interface PostRepositoryInterface
     /** @param array{title:string,excerpt:string,body_md:string,cover_image:?string,status:string,published_at:?string} $data */
     public function update(string $id, array $data): void;
 
-    /** @return bool true when a row was soft-deleted */
-    public function softDelete(string $id): bool;
+    /** Soft delete; $deletedBy is the acting user (audit). @return bool true when a row was soft-deleted */
+    public function softDelete(string $id, string $deletedBy): bool;
 }

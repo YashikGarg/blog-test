@@ -301,9 +301,21 @@ Skills: `modern-web-guidance:modern-web-guidance` (forms, accessible error annou
   {% endblock %}
   ```
 - In the form, delete the whole "Insert an image into the body" field (`#media`, `data-media-upload`, `#media-err`). The editor's upload button and drag/paste replace it. In `main.ts`, delete `uploadMedia()` and its `[data-media-upload]` branch, and drop the `isMediaResult` import from `main.ts` (`editor.ts` imports it now). Keep the `/admin/media` route.
-- The body textarea gets `data-max-bytes="{{ uploadMaxBytes }}"`. Keep `name="body"`, the label and `#body-err`.
+- The body textarea gets `data-max-bytes="{{ uploadMaxBytes }}"`, and its label gets `id="body-label"` (`<label for="body" id="body-label">`), so the editor is named by the visible label. Keep `name="body"` and `#body-err`.
 
-### 4.3 `frontend/src/editor.ts` (new; write it like this)
+### 4.3 `frontend/src/editor.ts` (new; write it exactly like this, verified)
+
+This exact file was typechecked, bundled and run in headless Chrome 157 under the app's CSP, with fake preview and upload endpoints. All 16 checks passed:
+- the editor mounts and its icons load from the bundle;
+- `forceSync` keeps the textarea in sync;
+- the preview shows the server HTML through `setHTML`, with the image kept and `onerror` removed;
+- a 422 on the body sets `aria-invalid`, links the error and moves focus into the editor;
+- an earlier invalid field keeps focus;
+- typing clears and unlinks the error;
+- an upload error goes to the status line with no `alert()`;
+- no horizontal scroll at 390 px.
+
+It follows the `modern-web-guidance` guides `sanitize-untrusted-html`, `accessible-error-announcement` and `forms`.
 
 ```ts
 // Admin post form only: EasyMDE replaces the body textarea. The preview HTML comes from the server's CommonMark,
@@ -318,10 +330,29 @@ function message(err: unknown, fallback: string): string {
   return err instanceof HttpError ? err.message : fallback;
 }
 
+// Everything core CommonMark can output, and nothing else (verified in Chrome 157: the default
+// Sanitizer drops every <img>, so it is listed with only src/alt/title).
+const PREVIEW_SANITIZER = {
+  elements: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'hr', 'strong', 'em', 'code', 'pre', 'blockquote', 'ul', 'li',
+    { name: 'ol', attributes: ['start'] }, { name: 'a', attributes: ['href', 'title'] }, { name: 'img', attributes: ['src', 'alt', 'title'] }],
+  attributes: [],
+};
+type HtmlSetter = { setHTML(html: string, options: { sanitizer: typeof PREVIEW_SANITIZER }): void };
+const canSetHTML = (el: Element): el is Element & HtmlSetter => typeof (el as Partial<HtmlSetter>).setHTML === 'function';
+
+/** Server-rendered CommonMark (html_input: escape, allow_unsafe_links: false), the same HTML show.twig prints with |raw.
+ *  The browser's Sanitizer API runs on top where it exists (Chrome, Firefox); Safari gets the server-escaped HTML as is. */
+function showPreview(target: HTMLElement, html: string): void {
+  if (canSetHTML(target)) target.setHTML(html, { sanitizer: PREVIEW_SANITIZER });
+  else target.innerHTML = html;
+}
+
 const textarea = document.getElementById('body');
+const bodyError = document.getElementById('body-err');
 if (textarea instanceof HTMLTextAreaElement) {
   // The original textarea is hidden by the editor; a hidden `required` control blocks submit. The server validates the body.
   textarea.required = false;
+  const status = textarea.form?.querySelector<HTMLElement>('[data-form-status]') ?? null;
 
   let latest = 0;
   let timer = 0;
@@ -333,8 +364,7 @@ if (textarea instanceof HTMLTextAreaElement) {
       body.append('body', markdown);
       send('/admin/preview', { method: 'POST', body }, isPreviewResult)
         .then((r) => {
-          // Server-rendered CommonMark (html_input: escape, allow_unsafe_links: false): the same HTML show.twig prints with |raw.
-          if (mine === latest) target.innerHTML = r.html;
+          if (mine === latest) showPreview(target, r.html);
         })
         .catch((err: unknown) => {
           if (mine === latest) target.textContent = message(err, 'Preview failed. Try again.');
@@ -361,6 +391,10 @@ if (textarea instanceof HTMLTextAreaElement) {
         .then((r) => onSuccess(r.url))
         .catch((err: unknown) => onError(message(err, 'Upload failed. Try again.')));
     },
+    // EasyMDE's default is alert(), also for "file too large". The form's status line (role="status") is announced instead.
+    errorCallback: (text) => {
+      if (status !== null) status.textContent = text;
+    },
     previewRender: (markdown, preview) => {
       renderPreview(markdown, preview);
       return null; // we fill the element ourselves when the server answers
@@ -369,21 +403,40 @@ if (textarea instanceof HTMLTextAreaElement) {
       'link', 'upload-image', '|', 'preview', 'side-by-side', 'fullscreen'],
   });
 
+  // The editor's input is named by the visible label, not an aria-label.
   const input = editor.codemirror.getInputField();
-  input.setAttribute('aria-label', 'Body (Markdown)');
-  input.setAttribute('aria-describedby', 'body-err');
-  // Typing clears a server error on the body (CodeMirror edits fire no input event on the textarea).
+  input.setAttribute('aria-labelledby', 'body-label');
+  input.setAttribute('aria-invalid', 'false');
+
+  // main.ts shows and clears #body-err after a save. Mirror that state onto the editor: aria-invalid, and the error
+  // linked in aria-describedby only while it is shown. After a failed save main.ts tried to focus the hidden
+  // textarea, so focus moves into the editor unless main.ts already focused an earlier invalid field.
+  const syncError = (): void => {
+    if (bodyError === null) return;
+    const shown = !bodyError.hidden && bodyError.textContent !== '';
+    input.setAttribute('aria-invalid', shown ? 'true' : 'false');
+    if (shown) input.setAttribute('aria-describedby', 'body-err');
+    else input.removeAttribute('aria-describedby');
+    const active = document.activeElement;
+    const otherField = active instanceof HTMLInputElement || active instanceof HTMLSelectElement || active === input;
+    if (shown && !otherField) editor.codemirror.focus();
+  };
+  if (bodyError !== null) {
+    new MutationObserver(syncError).observe(bodyError, { attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true });
+  }
+  syncError(); // a server-rendered error (no-JS re-render) is linked on load
+
+  // Typing clears the body error (CodeMirror edits fire no input event on the textarea); the observer then unlinks it.
   editor.codemirror.on('change', () => {
-    const error = document.getElementById('body-err');
-    if (error !== null && !error.hidden) {
-      error.hidden = true;
-      error.textContent = '';
+    if (bodyError !== null && !bodyError.hidden) {
+      bodyError.hidden = true;
+      bodyError.textContent = '';
     }
   });
 }
 ```
 
-Don't enable `previewImagesInEditor` (it writes `style=""`, which the CSP blocks), `autosave`, or the `guide` button (it links to an external site). The bundle contains CDN URLs for the spell checker and Font Awesome, but both are disabled above and the CSP would block them anyway. That's expected.
+Don't enable `previewImagesInEditor` (it writes `style=""`, which the CSP blocks), `autosave` (it writes with `innerHTML` and uses localStorage), or the `guide` button (it links to an external site). The bundle contains CDN URLs for the spell checker and Font Awesome, but both are disabled above and the CSP would block them anyway. That's expected.
 
 ### 4.4 `http.ts`
 
@@ -400,7 +453,7 @@ At the end, keep the editor inside the taste system tokens. Only these rules:
 ```css
 /* EasyMDE: match the form tokens; side-by-side is too narrow on phones. */
 .EasyMDEContainer .CodeMirror, .editor-toolbar { border-color: var(--line); }
-.EasyMDEContainer .CodeMirror { border-radius: 0 0 var(--r-md) var(--r-md); font: inherit; }
+.EasyMDEContainer .CodeMirror { border-radius: 0 0 var(--r-md) var(--r-md); font: inherit; font-size: max(1rem, 1em); } /* ≥16px: iOS does not zoom */
 .editor-toolbar { border-radius: var(--r-md) var(--r-md) 0 0; }
 .editor-toolbar button { min-width: 44px; min-height: 44px; }
 @media (max-width: 767px) { .editor-toolbar .side-by-side, .editor-toolbar .fullscreen { display: none; } }
@@ -442,7 +495,7 @@ It's admin only, and CsrfMiddleware checks the `X-CSRF-Token` header like any ot
       return $this->json(['ok' => true, 'html' => $this->posts->preview($input['body'])]);
   }
   ```
-- Safety: the HTML comes from the same CommonMark config as published posts (`html_input: escape`, `allow_unsafe_links: false`). It's the one allowed `innerHTML` in TS, the same way `{{ html|raw }}` is the one allowed `|raw` in Twig (A7/A9 have been updated).
+- Safety: the HTML comes from the same CommonMark config as published posts (`html_input: escape`, `allow_unsafe_links: false`). In the browser it's inserted with `setHTML()` and an explicit CommonMark allow-list where the Sanitizer API exists (Chrome 146+, Firefox 148+). Otherwise it falls back to `innerHTML`, which is the one allowed `innerHTML` in TS, the same way `{{ html|raw }}` is the one allowed `|raw` in Twig (A7/A9 have been updated). Don't use the default Sanitizer: in Chrome 157 it removes every `<img>`. Don't add DOMPurify (the user declined it).
 
 ---
 
@@ -456,14 +509,16 @@ It's admin only, and CsrfMiddleware checks the `X-CSRF-Token` header like any ot
    - `list_routes` includes `POST /admin/preview`, role admin;
    - `explain_query comments_for_post` still uses `idx_comments_post_status_created`.
 3. `composer test`: **24 tests**, green. `npm run typecheck` is clean. `npm run build` produces `app.js`, `editor.js`, `editor.css` and `editor-assets/`. `composer audit` and `npm audit --omit=dev` are clean.
-4. `grep -rn "uploader->delete\|unlink(" src/` returns nothing. The §A7 grep rules still pass. In TS, `innerHTML` appears only in `editor.ts`'s preview line.
+4. `grep -rn "uploader->delete\|unlink(" src/` returns nothing. The §A7 grep rules still pass. In TS, `innerHTML` appears only in `editor.ts`'s `showPreview()` fallback.
 5. Headless browser (as in the first build) on `/admin/posts/new` and `/admin/posts/{id}/edit` at 390 px and 1440 px:
    - no CSP violations in the console;
    - toolbar icons are visible;
    - Preview and Side-by-side show the server HTML;
    - pasting or dropping an image inserts `![](/uploads/…)`;
    - saving works without a page reload;
-   - saving with an empty body shows `#body-err`.
+   - saving with an empty body shows `#body-err` and moves focus into the editor;
+   - a non-image upload shows its error in the form's status line, with no `alert()`.
+   - Expect no CSP reports in normal use. A `script-src-attr` report appears only if the HTML contains an inline handler, which the server's escaping prevents.
 6. Manual DB checks:
    - Delete a comment as its owner and another as admin. `SELECT BIN_TO_UUID(deleted_by)` shows the owner id and the admin id.
    - From one IP, fail 4 logins on each of 5 emails (20 in total, each email under its own limit of 5). A sixth email from that IP is then refused with "Too many attempts". The unit test from §2.4 covers the per-key logic; this manual check covers the SQL and the wiring.
