@@ -22,7 +22,9 @@ Stack (fixed unless the user says otherwise): PHP ≥ 8.4 with no framework, MyS
 7. **Environments:** `local`, `dev` and `prod` env files. Every variable goes in env: DB settings, the password regex, limits, cache, and throttle numbers.
 8. **Libraries first, and show where:** use libraries for env, routing, HTTP/PSR-7, templates, DI, cache, logging, and so on. **No ORM:** SQL is handwritten in repositories with a proper folder structure. §B2 must list each library and its job, plus "our own code" with the reason no library fits.
 9. **Cache wherever it's safe:** rendered output, compiled templates, the compiled container, and OPcache. Never security state.
-10. **Frontend:** use the skills, keep it simple and type-safe, and make it mobile- and laptop-friendly (390 to 1440 px).
+10. **Frontend:** use the skills, keep it simple and type-safe, and make it mobile- and laptop-friendly (390 to 1440 px). **It must look current, not like a 1990s form page.** Build every component on taste-skill's kit (§2.3), and judge it from real screenshots, not from DOM checks alone.
+11. **Skills leave proof.** A skill counts as used only if it was **invoked** (Skill tool) in this task, not remembered. Every report (planner, Sonnet, subagent) ends with a `Skills run` list: skill → "clean", or the finding + fix. A report without it is rejected. *Lesson:* skills written only as advice in a prompt were skipped under time pressure, and the reviews missed real N+1s and over-budget writes as a result.
+12. **Fewest queries.** Every page has a query count (cold and warm cache) and every write action has a **query budget** in the plan, measured with the MySQL general log. `acc:detect-n-plus-one` and `acc:check-query-efficiency` run on every change to the PHP, in planning, in implementation and in review.
 
 ---
 
@@ -74,10 +76,11 @@ The rules the user set for planning:
 |---|---|
 | Layers, PSR stack, DI | `acc:no-framework-knowledge`, `acc:clean-arch-knowledge`, `acc:solid-knowledge` |
 | Tables, indexes, upserts, keyset, users and grants | `mysql-patterns` (read before writing SQL), `acc:check-index-usage`, `acc:check-query-efficiency`, `acc:detect-n-plus-one` |
+| **Every page and every write** | `acc:detect-n-plus-one` on each read path: an admin page that lists parents with children, a form that needs lookups per group, a loop over ids. `acc:find-race-conditions` / `acc:check-insecure-design` on each write. Write each write as one statement using the shapes in §G.1 step 9, and give it a budget in the plan |
 | Security menu (§3) | `acc:check-sql-injection`, `acc:check-csrf-protection`, `acc:check-authentication`, `acc:check-authorization`, `acc:check-output-encoding`, `acc:check-input-validation`, `acc:check-type-juggling`, `acc:check-insecure-design`, `acc:check-path-traversal` (if uploads), `acc:check-secure-headers`, `acc:check-sensitive-data`, `acc:check-dependency-vulnerabilities` |
 | Docker | `acc:create-docker-compose-dev`, `acc:docker-compose-knowledge`, but use §5's verified files (the skill's MySQL template breaks on 8.4, see §7) |
 | Frontend patterns | `modern-web-guidance` (`npx -y modern-web-guidance@latest search "<2–5 words>"`, then `retrieve`). It needs network access: ask once. |
-| Look | `taste-skill:design-taste-frontend` (§2.3) |
+| Look | `taste-skill:design-taste-frontend` (§2.3): **invoked** for the deal, again for each page's components, and its `copy-lint` + `consistency.mjs` checks run before hand-off |
 | Tests | `acc:testing-knowledge`, `acc:create-unit-test`, `acc:check-test-quality` |
 
 ### 1.3 P3 verify (Docker + MCP-style checks)
@@ -113,14 +116,17 @@ The project's own MCP server is built by Sonnet in step 1 of the plan (§5.5). D
 
 1. **Missing required values**, if any (title, time limit, unclear sign-up or roles).
 2. **Security add-ons** (multi-select): the §3 optional menu items the skills flag for these features, each with a one-line cost.
-3. **Look** (single-select): 2–3 palette and type options from taste-skill (§2.3), with a "decide for me" option first.
+3. **Look** (single-select): 2–3 palette and type options from taste-skill (§2.3), with a "decide for me" option first. If the app is public, also ask whether it needs a **landing page** (taste full run) or the list page is enough.
 4. **Feature gaps** (multi-select): things the feature list probably needs but doesn't say. For example: edit/delete for every create (full CRUD); who may edit or delete (owner/admin); an empty state; a search/filter for a list; a confirm before delete; drafts; an image alt text. Mark the recommended ones.
 
 If the user removes a feature or asks for an extra one later, update Part B and the plan before writing more. Ask again only if the change touches security or the schema.
 
 ### 2.3 Palette via taste-skill (app mode)
 
-- Read the skill's system-layer docs. Use only the **system layer** (`system.css`/`system.js` tokens, `.wrap`, `.btn`, `.card`, nav, form recipe, hover/press motion, access rules). Skip the marketing-page parts (hero dealing, moments, shaders, photo quotas, one-section-per-screen).
+- Read the skill's system-layer docs. **App pages** (lists, details, forms, admin) use the **system layer**, and use it properly: every component is built on the kit classes and tokens (`.wrap`, `.btn` + exactly one primary and one secondary style, `.card` with a stretched link, nav, the form recipe, hover/press motion, access rules). Never hand-roll plain HTML defaults next to the kit. *Lesson:* a project that only copied the tokens shipped a UI the user called "from the 90s", and had to be rebuilt.
+- **A public landing page** (if the app has one) gets the **full run**: dealt hero, nav, footer, close and moment, the copy rules, and `copy-lint` + `consistency.mjs`. Offer this in the question round (§2.2, Look).
+- **Kit rules that clash with app pages** (one section per screen, fixed screen-tall heights): turn them off on app pages with content-height sections and log the failing checks as "by design". Otherwise the pages get huge empty bands.
+- **No empty visuals:** a card or details page without an image shows a compact insurer/brand/initials strip, never a large grey panel.
 - To get palette options: if the skill has a deal script (`scripts/start.mjs deal`), run it once for the kind and trade that fit the title. Offer its first 2 palettes plus 1 type pairing. Choose for **readability**: body text must stay ink-on-paper with a contrast ratio of at least 4.5:1, so reject palettes that set body text in the accent colour.
 - **Close the skill's landing gate right after dealing** (`scripts/gate.mjs --done`). Otherwise its Stop hook blocks Sonnet later. Never re-deal during implementation.
 - The CSP forbids Google Fonts and inline `<style>`. **Self-host the font** (`npm i -D @fontsource-variable/<font>`, then copy the woff2 to `public/assets/fonts/`), and put the tokens at the top of `public/assets/app.css`. Copy `system.css`, `system.js`, `motion.css` and `motion.js` into `public/assets/vendor/taste/`, and load the JS files as `type="module"`.
@@ -153,6 +159,8 @@ All of these are written out in §4 A7. Copy them as they are.
 | Per-account lock across IPs | high-value accounts | lockout DoS risk; usually declined |
 | Content moderation queue | user-generated posts | 1 status + admin screen |
 | Audit log table | money, roles, admin actions | 1 table |
+| Re-check the role per request | more than one admin, or user management | 1 PK query per admin request |
+| Absolute session lifetime | admin panels | 1 env + 3 lines (logout after N hours even when active) |
 | SSRF / XXE / command injection / deserialization checks | only if a feature fetches URLs, parses XML, shells out, or unserializes | depends |
 
 ---
@@ -180,10 +188,11 @@ The planner writes `CLAUDE.md` as: a 6-line header, then this Part A, then Part 
 | DB, migrations, queries | `mysql-patterns` (read before any SQL); review with `acc:check-index-usage`, `acc:check-query-efficiency`, `acc:detect-n-plus-one` |
 | Tests | `acc:testing-knowledge`, `acc:check-test-quality` |
 | HTML/CSS/client TS | `modern-web-guidance` (search, then retrieve) |
-| Visual design | `taste-skill` **system layer only**. The look is already dealt in §B9: never re-deal. |
+| Visual design | `taste-skill`: the **system layer** (kit classes + tokens, one primary + one secondary button) on every app page; the **full run** on a landing page, if there is one. The look is already dealt in §B9: never re-deal. Read real screenshots at 390/768/1024/1440 **and** a short window (about 1366×650) before calling a UI done. |
 | While building | the project MCP server `<app>-dev` (§B8): `db_schema` before SQL, `explain_query` after any query change (it must hit an index), `verify_constraints` after schema changes, `list_routes` before adding a link or form. A DB claim needs a tool result. If the MCP session expires, ask the user to run `/mcp`. |
 | Docker | MySQL runs **only** in Docker; PHP runs on the host. |
 | Subagents | Only when the plan says so, with **file ownership** (no two agents edit one file). A subagent must invoke the skills for its files; the main agent reviews its diff against the plan. |
+| Proof of skill use | A skill counts as used only when it was **invoked** (Skill tool) in this task, not remembered. Every report (subagent or main) ends with a `Skills run` list: skill → "clean" or finding + fix. The main agent rejects a subagent report without it. A review always invokes `acc:detect-n-plus-one` and `acc:check-query-efficiency` on the changed PHP. |
 
 ## A3. Architecture: MVC with a service layer
 ```
@@ -201,7 +210,8 @@ View = Twig (autoescape). TS = progressive enhancement.
 ## A4. SOLID and DI
 - S: one controller per resource, one service per use-case group, one repository per table. O: extend by decorating (e.g. a cached renderer). L/I: small interfaces. D: services depend on interfaces, wired only in `config/container.php` (PHP-DI). No `new` of a service or repository inside a class, and no service locator.
 - `declare(strict_types=1)` everywhere, PSR-4/PSR-12, `final` by default.
-- Reuse before adding: shared helpers (`render`, `redirect`, `json`, `respond`, `respondInvalid`, `body`) live in `BaseController`. One exception family, one layout. No file with a single caller under ~15 lines.
+- Reuse before adding: shared helpers (`render`, `redirect`, `json`, `respond`, `respondInvalid`, `body`, `currentUserId()`) live in `BaseController`. One exception family, one layout. No file with a single caller under ~15 lines. **One rule, one place:** never copy a private helper into several controllers, and never re-check in a service what the boundary already guarantees (e.g. the session user id).
+- Constructor injection only: no `#[Inject]` property injection and no hidden dependencies. **No controller → controller dependency:** shared view-building code goes in one small presenter class.
 - **Minimum files:** every file in §B3 has a reason. Don't add files, layers or docs that aren't in §B3 without asking.
 
 ## A5. Library first
@@ -219,6 +229,23 @@ Use Composer/npm packages for env, routing, DI, PSR-7/15/17, templates, markdown
 - One query per list (no N+1). **Keyset pagination** `(sort_col, id) < cursor`, backed by a matching index, with `LIMIT` bound as an int. No deep OFFSET.
 - **Concurrency:** `REPEATABLE-READ` (set in `app.cnf`). Counters only change via `SET c = c + :d`. Check-then-act flows use `GET_LOCK` and release it in `finally`. Keep transactions short, with no I/O, and always lock in the same order. Retry once on deadlock (1213/40001).
 - Upserts use the row alias (`AS new … new.col`), never `VALUES(col)`.
+- **Fewest round trips per action:** no count-then-insert; no read-then-write when one `INSERT … SELECT` / `UPDATE … WHERE` can do it; no existence check the DB already enforces (UNIQUE, FK, CHECK); no query inside a loop (batch with `JSON_TABLE` / `IN`). Each write action has a **query budget** in its plan.
+  - Duplicates: a plain INSERT/UPDATE plus the UNIQUE key. Map error 1062 to a `DuplicateException`, which becomes a field error. Never SELECT-then-INSERT.
+  - The parent must be alive: `INSERT … SELECT … FROM parent WHERE id = :p AND status = 'active'`. 0 rows means gone.
+  - A blocked delete: `UPDATE … SET status='deleted' … WHERE id = :id AND NOT EXISTS (live children)`. 0 rows means blocked or gone; only then count, to build the message.
+  - A computed default (e.g. "last position"): compute it inside the INSERT (`COALESCE(:v, (SELECT MAX(…)+1 …))`), not with a separate SELECT.
+  - Many child rows: one multi-row `INSERT … SELECT … FROM JSON_TABLE(:json …)`. A tick/untick set: one upsert.
+  - **Every edit updates only the fields that changed, never all of them** (user rule).
+    - **Client:** the TS submit compares each input with its `defaultValue` / `defaultChecked` and drops the unchanged entries from the `FormData`. After a successful save it resets the defaults.
+    - **Server:** one static UPDATE with `SET col = COALESCE(:col, col)` for every editable column, so a missing or blank field binds `NULL`, which means keep. The SQL stays a fixed constant, never built from the field list (A7). If nothing was sent, return 422 "Change at least one field". A field that was sent is validated as on create.
+    - **Columns where NULL is a real value** (e.g. remove an optional image): send an explicit flag (`remove_image=1`) and use `CASE WHEN :remove = 1 THEN NULL ELSE COALESCE(:v, col) END`.
+    - **Checkbox sets** (an unticked box is never sent): the client adds a `features_changed=1` marker only if the set changed. The server touches the child rows only when the marker is there, and then with one upsert.
+    - **Without JS** the full form is sent. Values equal to the current ones change nothing, so this is still correct.
+    - **Why:** it prevents **lost updates** (tab A renames, a stale tab B changes the price and would bring the old name back), and the code says what the user did. It does not save disk writes: MySQL already writes nothing for an unchanged value ("Changed 0"). Don't claim that it does.
+  - When two editors may change **the same field**, also add an optimistic version check: `… AND updated_at = :seen`, where 0 rows means "changed elsewhere, reload".
+  - An optional file column uses `logo = COALESCE(:logo, logo)` in the same UPDATE. Read the old file name first only when a new file was sent. Delete the old file **after** success, and delete the new file on 0 rows or 1062.
+  - Set `ATTR_FOUND_ROWS` so an unchanged UPDATE still counts 1 row (otherwise "unchanged" looks like "gone").
+- **ORDER BY uses qualified columns** (`p.price, p.id`). An unqualified `id` resolves to the select alias `BIN_TO_UUID(id) AS id` and forces a filesort. Keyset uses `price > :c OR (price = :c2 AND id > :id)`; MySQL doesn't range-optimise a row constructor. A named placeholder can't repeat under native prepares.
 - Least privilege: the app user has `SELECT, INSERT, UPDATE` only; a separate migrate user runs DDL. Prod uses `REQUIRE SSL`. Never `ALL` or `*.*`.
 - Ownership is enforced in the **service**.
 - Migrations are `database/migrations/NNN_name.sql`, applied once in order by `bin/migrate.php` and recorded in `schema_migrations`. Never edit an applied one. `database/seed.sql` is idempotent.
@@ -241,10 +268,10 @@ A 32-byte session token, rotated with `session_regenerate_id(true)` on login/log
 - A success resets **only** the account counter. After a quiet period longer than MAX, the count restarts at 1.
 - The password regex comes from env.
 ### Session, authorization, uploads, headers, errors
-- **Session cookie:** HttpOnly, SameSite=Lax, Secure in prod, strict mode, custom name (`__Host-` in prod), and a server-side idle timeout (`last_seen`).
+- **Session cookie:** HttpOnly, SameSite=Lax, Secure in prod, strict mode, custom name (`__Host-` in prod), and a server-side idle timeout (`last_seen`, `SESSION_IDLE_SECONDS`). Set `session.gc_maxlifetime` from that same value, ≥ the idle seconds (PHP's default 1440 s can delete a session before a 30-minute timeout). Unit-test the timeout with `MockClock`: active → kept, idle → logged out.
 - **Authorization:** roles are checked on the server in `RouteMiddleware` through `Role::satisfies()` (a hierarchy). Never compare roles with `===` for access. Hidden buttons aren't security.
 - **Uploads:** a size limit from env, `finfo` MIME against an env whitelist, `getimagesize`, and a random name with the extension taken from the MIME type. Files go in `public/uploads/` with PHP execution off. Deletes only accept exact generated names via `basename()`.
-- **Headers:** CSP `default-src 'self'` (no inline script or style, no CDN), nosniff, `Referrer-Policy: strict-origin-when-cross-origin`, `frame-ancestors 'none'`, HSTS in prod. SecurityHeaders is the **outermost** middleware so error pages carry the headers too.
+- **Headers:** CSP `default-src 'self'` (no inline script or style, no CDN), nosniff, `Referrer-Policy: strict-origin-when-cross-origin`, `frame-ancestors 'none'`, HSTS in prod. SecurityHeaders is the **outermost** middleware so error pages carry the headers too. HTML responses (pages and error pages) send `Cache-Control: no-store` (they carry the CSRF token and admin data).
 - **Errors:** details only when `APP_DEBUG=true`; otherwise a generic page and Monolog.
 - **Mass assignment:** services pick fields explicitly. Route ids must match the UUIDv7 regex `[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}`.
 ### PHP hardening
@@ -268,6 +295,7 @@ A 32-byte session token, rotated with `session_regenerate_id(true)` on login/log
 - **One JSON contract:** with `Accept: application/json`, the response is `200 {ok:true,…,redirect?}`, `422 {ok:false,errors:{field:msg}}`, or 401/403/404 JSON; otherwise redirect/re-render. `respond()` and `respondInvalid()` decide which. JSON sends `no-store` and is encoded with `JSON_HEX_TAG|JSON_HEX_AMP`.
 - JSON is rendered by cloning a `<template>` and filling it with `textContent`. Internal URLs only (start with `/`, not `//`, no backslash or control characters).
 - TS `strict`, no `any`. Every JSON response has an interface plus a runtime guard, and one fetch helper adds the CSRF header.
+- A superseded filter/search request is aborted (`AbortController` + `AbortSignal.timeout`). A fetch that swaps page HTML checks `response.ok` and the content type first.
 - Native first: `<dialog>` confirms, `:user-invalid` plus `aria-invalid` (the error linked in `aria-describedby` only while shown), focus on the first invalid field, `loading="lazy"`/`fetchpriority`.
 - Third-party UI libraries are bundled by esbuild (never a CDN), loaded only where used, with CDN-download and `style=""` options turned off.
 - Mobile-first at 390/768/1024/1440: 44 px tap targets, no horizontal scroll, side gutters at every width, `color-scheme` per §B9.
@@ -276,7 +304,7 @@ A 32-byte session token, rotated with `session_regenerate_id(true)` on login/log
 phpdotenv loads `.env`, then `.env.{APP_ENV}`. Real server env wins (read via `getenv()` first). Every tunable lives in env, read **only** in `config/settings.php`. Environments: `local`, `dev`, `prod`. Only `.env.example` is committed.
 
 ## A11. Done means
-`composer test` is green, `npm run typecheck` and `npm run build` are clean, the audits are clean, the MCP `verify_constraints` all pass, A7 has been reviewed, and this file is updated (A1.3).
+The query-count table (MySQL general log, every route incl. admin pages and POSTs, cold/warm) is within budget, every report has its `Skills run` list, `composer test` is green, `composer stan` reports 0 errors (PHPStan level 8, no baseline, no ignores), `npm run typecheck` and `npm run build` are clean, the audits are clean, the MCP `verify_constraints` all pass, A7 has been reviewed, real screenshots have been read at every width, and this file is updated (A1.3).
 ````
 
 ---
@@ -343,7 +371,8 @@ SQL
 
 ### 5.4 Libraries (Composer + npm)
 - **Composer require:** `vlucas/phpdotenv`, `nikic/fast-route`, `php-di/php-di`, `nyholm/psr7`, `nyholm/psr7-server`, `relay/relay`, `laminas/laminas-httphandlerrunner`, `twig/twig`, `monolog/monolog`, `symfony/cache`, `symfony/clock`, `symfony/uid`, `php-mcp/server`. Add `league/commonmark` if there's markdown.
-- **Composer require-dev:** `phpunit/phpunit`.
+- **Composer require-dev:** `phpunit/phpunit`, `phpstan/phpstan` (level 8 on `src/` from step 1, script `composer stan`; fixing 50+ errors at the end costs far more). `php-mcp/server` may live in require-dev too (dev-only tool).
+- **`config/php.prod.ini`** also sets `session.gc_maxlifetime` ≥ `SESSION_IDLE_SECONDS`.
 - **`"php": ">=8.4"`**, because symfony 8 needs it.
 - **Composer scripts:** `test`, `serve` (`php -S localhost:8000 -t public public/index.php`), `migrate`, `db:up`, `db:down`.
 - **npm devDependencies:** `typescript`, `esbuild`, `@fontsource-variable/<font>`. Runtime UI libraries go under `dependencies`, with exact versions at least 2 weeks old.
@@ -354,15 +383,15 @@ SQL
 ### 5.5 Project MCP server `<app>-dev` (built by Sonnet in plan step 1)
 - **`.mcp.json`:** `{"mcpServers":{"<app>-dev":{"type":"stdio","command":"php","args":["bin/mcp-server.php"],"env":{}}}}`
 - **`bin/mcp-server.php`:**
-  - It loads env and the container, and **refuses `APP_ENV=prod`**.
-  - It builds with `PhpMcp\Server\Server::make()->withServerInfo('<app>-dev','1.0.0')->withContainer($c)->withTool([DevTools::class,'dbSchema'],'db_schema','…')…->build()->listen(new StdioServerTransport())`.
-  - It never echoes to stdout, because stdout carries the protocol.
+    - It loads env and the container, and **refuses `APP_ENV=prod`**.
+    - It builds with `PhpMcp\Server\Server::make()->withServerInfo('<app>-dev','1.0.0')->withContainer($c)->withTool([DevTools::class,'dbSchema'],'db_schema','…')…->build()->listen(new StdioServerTransport())`.
+    - It never echoes to stdout, because stdout carries the protocol.
 - **`src/Mcp/DevTools.php`** (dev-only, connects as the app user):
-  - `db_schema`: `SHOW CREATE TABLE` for a fixed table list.
-  - `explain_query(name)`: a whitelist map from name to `[Repository::CONST_SQL, params]`. It returns `['error','allowed']` for an unknown name.
-  - `verify_constraints`: an N-row table of bad writes inside one transaction that's always rolled back. Each row is `{#, case, result: PASS|FAIL, detail}`, and a PASS means the expected constraint name appeared.
-  - one `verify_<counter>` per counter table, which lists drifted rows (must be `[]`).
-  - `list_routes`, built by replaying `config/routes.php` into a collector.
+    - `db_schema`: `SHOW CREATE TABLE` for a fixed table list.
+    - `explain_query(name)`: a whitelist map from name to `[Repository::CONST_SQL, params]`. It returns `['error','allowed']` for an unknown name.
+    - `verify_constraints`: an N-row table of bad writes inside one transaction that's always rolled back. Each row is `{#, case, result: PASS|FAIL, detail}`, and a PASS means the expected constraint name appeared.
+    - one `verify_<counter>` per counter table, which lists drifted rows (must be `[]`).
+    - `list_routes`, built by replaying `config/routes.php` into a collector.
 - If the Claude session says "Invalid or expired session", the user runs `/mcp`. Meanwhile, call the server over stdio with a JSON-RPC client: `initialize`, then `notifications/initialized`, then `tools/call`.
 
 ---
@@ -373,15 +402,15 @@ SQL
 - **Header:** a 6-line note saying to read it in full; Part A is generic and Part B is this project; the plan is in `docs/IMPLEMENTATION_PLAN.md`; later changes go in `docs/CHANGES_NNN.md`.
 - **Part A:** §4, verbatim.
 - **Part B:**
-  - **B1 Scope:** roles, features, and what's out of scope.
-  - **B2 Libraries:** a table of need, library and notes, plus "our own code" with the reasons.
-  - **B3 Full directory tree:** every file with a one-line comment, and the counts.
-  - **B4 DB:** a table of tables and key points. The SQL itself goes in the plan.
-  - **B5 Routes:** method, path, handler and role.
-  - **B6 Env vars**, with defaults.
-  - **B7 Cache.**
-  - **B8 Commands and MCP.**
-  - **B9 Decision log:** dated, newest last. It holds every approved and declined item, each verification result, the look decision, and known gaps.
+    - **B1 Scope:** roles, features, and what's out of scope.
+    - **B2 Libraries:** a table of need, library and notes, plus "our own code" with the reasons.
+    - **B3 Full directory tree:** every file with a one-line comment, and the counts.
+    - **B4 DB:** a table of tables and key points. The SQL itself goes in the plan.
+    - **B5 Routes:** method, path, handler and role.
+    - **B6 Env vars**, with defaults.
+    - **B7 Cache.**
+    - **B8 Commands and MCP.**
+    - **B9 Decision log:** dated, newest last. It holds every approved and declined item, each verification result, the look decision, and known gaps.
 
 ### 6.2 `docs/IMPLEMENTATION_PLAN.md`
 1. **Kickoff prompt** for Sonnet, at the top: "Read CLAUDE.md and docs/IMPLEMENTATION_PLAN.md fully. Implement steps 0–N in order within <T> minutes, running the parallel streams as written. Don't ask questions; follow the files. Finish with the review step and the §B9 entry."
@@ -391,7 +420,9 @@ SQL
 5. **Steps 2…:** middleware and the session, then models, then repositories (with **exact SQL**, as already verified in P3), then services, then controllers and views, then TS, then tests (a table of name, behaviour and doubles), then review.
 6. **Exact schema SQL** (`001_init.sql`), exactly as verified in P3.
 7. **The MCP `verify_constraints` table:** case, SQL and expected constraint.
-8. **The review step:** `composer test`, typecheck, build, the audits, MCP, `acc:audit-security`, the §A7 greps, and a headless Chrome click-through at 390 and 1440 px (CSP violations, horizontal scroll, AJAX with no reload). Then the §B9 entry.
+8. **The query budget table:** one row per route and write action (GET cold/warm, every POST), with the expected statement count. Reads: each page is a fixed number of queries whatever the row count (no N+1). Writes: one statement each, unless the plan says why (e.g. a file name that must be read before a soft delete, because MySQL has no `RETURNING`).
+9. **Skills per step:** each step names the skills to **invoke**, and its report ends with `Skills run`. Step 0b: the main agent invokes `acc:detect-n-plus-one` and `acc:check-query-efficiency` on the plan's SQL and loops **before** any subagent starts.
+10. **The review step:** `composer test`, `composer stan`, typecheck, build, the audits, MCP, `acc:audit-security`, `acc:detect-n-plus-one`, `acc:check-query-efficiency`, the §A7 greps, the query-count run against the budget table (general log), taste `copy-lint` + `consistency.mjs`, and a headless Chrome click-through at 390/768/1024/1440 (CSP violations, horizontal scroll, AJAX with no reload) **plus reading the screenshots**. Then the §B9 entry.
 
 Sizing guide: about 22 tests for a medium app. Steps get roughly 5–12 minutes each. If the user's time is tight, plan **more parallel streams rather than fewer features**, and ask before cutting a feature.
 
@@ -419,6 +450,14 @@ Sizing guide: about 22 tests for a medium app. Steps get roughly 5–12 minutes 
 | TS 7 | A side-effect CSS import gives TS2882, so set `noUncheckedSideEffectImports:false`. |
 | Subagents | They skip skills unless told to, so put "invoke skill X" in their prompt and have the main agent re-run the checklist. They need file ownership. |
 | Test scripts | Tests must wait for a result, never sleep a fixed time. `requestSubmit()` ignores a disabled button, so overlapping requests are possible in tests. |
+| N+1 that slipped through | An admin page listing parents with their children ran one query per parent; a form needing lookups per group did the same. Load all children in **one** query and group them in PHP. Only `acc:detect-n-plus-one` plus a general-log count caught it; reading the code didn't. |
+| Query counting | Use `SET GLOBAL general_log=1, log_output='TABLE'`, then count `mysql.general_log` rows for the app user with `command_type IN ('Execute','Query')`, excluding the connection's `SET NAMES`. Wipe `var/cache/app` for the cold run. Wait about 1 s before counting (the log table flushes late). |
+| Cache | Cache **one entry per entity** and read a list in **one batch** (`getItems`), with tags per entity and a `lists` tag for id lists. Invalidate only the edited entity. Never cache search or cursor pages (unbounded keys fill the disk). A fully cached page still opens a PDO connection unless PDO is lazy. |
+| EXPLAIN | Run `ANALYZE TABLE` after a bulk insert, or stale statistics pick the wrong index. |
+| Browser checks | With `Emulation.setDeviceMetricsOverride(mobile:true)` Chrome widens the viewport to fit overflow, so "no horizontal scroll" passes falsely: use `mobile:false`. Check a short window too (about 650 px tall): fixed one-screen heroes overlap the next section there. Absolutely positioned visually-hidden text escapes a scroll wrapper unless the wrapper is `position: relative`. |
+| taste kit + CSP | The kit CSS has `data:` URI glyphs and an inline entrance script that the CSP blocks: replace them with files. The kit's screen-tall section heights leave empty bands on content pages. |
+| Uploads in tests | **Never delete files under `public/uploads/` by glob.** Remove only the files the test created, by name (a glob once deleted a user's real upload). |
+| Write consistency | Validate the same thing in one place for every resource (e.g. the session user id only in `BaseController`), or reviewers see "inconsistent" checks. |
 
 ---
 
@@ -426,9 +465,11 @@ Sizing guide: about 22 tests for a medium app. Steps get roughly 5–12 minutes 
 
 1. Run `composer test`, `npm run typecheck`, `npm run build`, `composer audit` and `npm audit --omit=dev`.
 2. MCP: `verify_constraints` all PASS, every `verify_<counter>` returns `[]`, `list_routes` matches §B5, and `explain_query` on every name shows no `ALL` (seed about 300 rows temporarily, then remove them).
-3. Skills: `acc:check-sql-injection`, `acc:check-csrf-protection`, `acc:check-authentication`, `acc:check-authorization`, `acc:check-output-encoding`, `acc:check-type-juggling`, `acc:check-path-traversal` (if uploads), `acc:check-test-quality`, `acc:check-query-efficiency`, and `modern-web-guidance` (forms, accessible-error-announcement).
-4. A headless Chrome click-through over CDP (Node's built-in WebSocket, no dependencies) at 390 and 1440 px: no CSP violations, no horizontal scroll, every main flow working by AJAX with no reload, and the test data cleaned up afterwards.
-5. Report a table of check and result, then the findings ranked by severity. **Ask before fixing anything that changes design or security**, and write the fixes as `docs/CHANGES_NNN.md` with a time budget and parallel streams.
+3. Skills (**invoke** each; list them in `Skills run`): `acc:detect-n-plus-one`, `acc:check-query-efficiency`, `acc:check-sql-injection`, `acc:check-csrf-protection`, `acc:check-authentication`, `acc:check-authorization`, `acc:check-output-encoding`, `acc:check-type-juggling`, `acc:check-path-traversal` (if uploads), `acc:check-test-quality`, `acc:find-type-issues`, `modern-web-guidance` (forms, accessible-error-announcement), taste `copy-lint` + `consistency.mjs`.
+4. **Query count** (general log) for every route, cold and warm, and every POST, compared with the plan's budget table. Anything over budget is a finding unless the plan explained it.
+5. A headless Chrome click-through over CDP (Node's built-in WebSocket, no dependencies, `mobile:false`) at 390/768/1024/1440 and one short window: no CSP violations, no horizontal scroll, every main flow working by AJAX with no reload, and the test data cleaned up by name afterwards. **Read the screenshots** (empty bands, overlaps, broken images, squeezed messages).
+6. Live probes for every write: the happy path, a duplicate, a gone parent, a guest with and without a CSRF token, and the statement count per action.
+7. Report a table of check and result, then the findings ranked by severity. **Ask before fixing anything that changes design or security**, and write the fixes as `docs/CHANGES_NNN.md` with a time budget and parallel streams.
 
 ---
 
@@ -437,16 +478,18 @@ Sizing guide: about 22 tests for a medium app. Steps get roughly 5–12 minutes 
 ### G.1 From features to a design (in order)
 1. **Actors and roles:** who uses it (guest, user, admin, plus domain roles like `author` or `seller`)? Make a `Role` enum with a `satisfies()` hierarchy. Mark which routes are guest-only.
 2. **Entities:** one table per noun that has its own lifecycle. For each, decide:
-   - **Ownership:** who creates, edits and deletes it. This is enforced in the service.
-   - **Status enum:** e.g. `draft|published|deleted`, `open|closed|deleted`, `pending|paid|cancelled`. Use VARCHAR + a CHECK + a PHP enum. Soft delete goes through the status, plus `deleted_at` and `deleted_by`.
-   - **Natural keys:** UNIQUE (email, slug, code, (a_id, b_id) pairs).
-   - **Lengths and ranges:** CHECK constraints (e.g. `CHAR_LENGTH(title) BETWEEN 1 AND 200`, `qty > 0`, `price >= 0` with `DECIMAL(10,2)`, never FLOAT for money).
+    - **Ownership:** who creates, edits and deletes it. This is enforced in the service.
+    - **Status enum:** e.g. `draft|published|deleted`, `open|closed|deleted`, `pending|paid|cancelled`. Use VARCHAR + a CHECK + a PHP enum. Soft delete goes through the status, plus `deleted_at` and `deleted_by`.
+    - **Natural keys:** UNIQUE (email, slug, code, (a_id, b_id) pairs).
+    - **Lengths and ranges:** CHECK constraints (e.g. `CHAR_LENGTH(title) BETWEEN 1 AND 200`, `qty > 0`, `price >= 0` with `DECIMAL(10,2)`, never FLOAT for money).
 3. **Relations:** each FK is indexed and RESTRICT. Many-to-many goes in a pair table with a composite PK (`(a_id, b_id)`) and an index on `b_id`. One-per-user actions (a like, a vote, a follow, an RSVP) use a pair table with a status toggle and one upsert.
 4. **Derived numbers** (counts, totals, stock): a 1:1 counter table changed in the same transaction as the child write, with `UNSIGNED` (or a CHECK ≥ 0), and an MCP `verify_<counter>` drift check. Decrementing stock or a balance uses `UPDATE … SET n = n - :q WHERE id = :id AND n >= :q`, then checks that 1 row changed (no oversell, no read-modify-write).
 5. **Lists:** for every list page, write down its WHERE + ORDER BY, and give it a composite index matching that order. Lists that grow use keyset pagination. Search uses a FULLTEXT index, ordered by date or relevance.
 6. **Check-then-act flows** (a booking slot, a unique claim, a login): one atomic statement if possible (an upsert, a conditional UPDATE, a UNIQUE key); otherwise `GET_LOCK` in fixed order.
 7. **Files:** an uploads service (§4 A7 uploads), with files deleted once no live row references them.
 8. **Accounts** (if any): the §3.1 auth + throttle + `login_attempts` table, which is always the same.
+9. **Writes:** for each create, edit and delete, write down its single statement (§4 A6, "Fewest round trips") and its query budget. **Every edit (small or full form) updates only the changed fields**: `COALESCE` per column, the client sends only what changed, and checkbox sets use a changed marker. Add an `updated_at` check if two editors may change the same field. A file attached to a row is deleted only after the DB write succeeds.
+10. **Reads:** for each page, list the queries it runs. A page that shows parents with their children loads all children in one query, never one per parent.
 
 ### G.2 Feature-gap checklist (offer in §2.2 question 4; recommend the obvious ones)
 - Every create has a read, update and delete, with an ownership rule for each.
@@ -529,7 +572,8 @@ The login counter, lock and reset SQL, and the `GET_LOCK` order, are in §4 A7. 
 - `GET_LOCK(:name,:t)`, with the name built in PHP.
 
 ### G.5 Default tests (pick about 1 happy + 1–2 unhappy per service behaviour)
-- **Always:** AuthService (login works, wrong password fails, IP lock refuses, weak password rejected, duplicate email rejected), LoginThrottle (doubling + cap, extend at threshold), CsrfMiddleware (missing, valid, cross-site), and Role (hierarchy).
+- **Always:** AuthService (login works, wrong password fails, IP lock refuses, weak password rejected, duplicate email rejected), LoginThrottle (doubling + cap, extend at threshold), CsrfMiddleware (missing, valid, cross-site), Role (hierarchy), and the session idle timeout (active kept, idle logged out; `MockClock`).
+- **Per edit:** an unchanged/blank field passes `null` (keep) to the repository, nothing sent is a field error, and a checkbox set without the changed marker leaves the child rows alone.
 - **Per domain service:** the happy create, a validation failure, an ownership denial, and one status-transition rule.
 - **Per counter or stock rule:** a test that it can't go below zero.
 
