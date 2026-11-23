@@ -5,7 +5,7 @@ Read this file in full before you touch code. It has two parts:
 - **Part A — Engineering rules.** These apply to any PHP + MySQL + TypeScript project. Copy Part A into a new project as is.
 - **Part B — This project.** Facts about this repo: stack, structure, schema, routes, env, commands. Rewrite Part B for each new project.
 
-The step-by-step build order is in `docs/IMPLEMENTATION_PLAN.md`. Later approved changes each get their own file, `docs/CHANGES_NNN.md` (currently `docs/CHANGES_002.md` and `docs/CHANGES_003.md`). Implement such a file exactly as written, the same way as the plan.
+The step-by-step build order is in `docs/IMPLEMENTATION_PLAN.md`. Later approved changes each get their own file, `docs/CHANGES_NNN.md` (currently `docs/CHANGES_002.md`, `docs/CHANGES_003.md` and `docs/CHANGES_004.md`). Implement such a file exactly as written, the same way as the plan.
 
 ---
 
@@ -573,3 +573,19 @@ composer serve                       # php -S localhost:8000 -t public public/in
   - **Live data:** the user's own "Remove cover" on `tesing-new` deleted its unused files. The only unused file in `public/uploads/` is the pre-003 orphan `e48a335f….jpg`, a known gap.
   - Fixed the stale §B5 delete row.
   - **Low, left as is:** `pathsIn` also matches `/uploads/<hex>.<ext>` inside an external URL. That only makes the path a candidate, and `isUploadInUse` still protects any file a live post uses.
+- 2026-11-23 (user review; **planned**, see `docs/CHANGES_004.md`, about 25 min with 3 parallel streams): change set 004, fewer queries plus real caching.
+  - **Found with `acc:detect-n-plus-one` and `acc:check-query-efficiency`:**
+    - two queries in a loop: `deleteUnused` ran one query per image, and `uniqueSlug` one per suffix;
+    - check-then-act extra reads on vote (4 statements), comment add/edit/delete (3/3/2) and register (3);
+    - an unbounded comment list;
+    - the post and comment column lists copied 4 and 2 times.
+  - **Decided with the user:**
+    - The vote sends the wanted state (`voted=1|0`), not a toggle: 2 statements, with the count from `LAST_INSERT_ID`.
+    - Comment ids always come from the DB (an index-only keyset query, 30 per page, newest first). Comment bodies come from `comment.{id}` cache entries, with misses loaded in one batch `IN` query.
+    - The id list itself is never cached, because a read → append → write-back on PSR-16 loses ids under concurrency.
+    - A delete removes the cache entry.
+    - `post.{slug}` and `posts.home` are cleared on admin writes. The vote count is cached with the DB's value after every vote, TTL `CACHE_COUNT_TTL` (eventually consistent, user accepted).
+    - A post update with no changes writes nothing.
+    - **Declined:** a `COALESCE(:x, col)` partial update. It can't set NULL (remove-cover, draft `published_at`), and a primary-key UPDATE costs the same.
+  - **Verified on Docker MySQL 8.4** as `inkwell_app` in rolled-back transactions; the results are in the doc, §6.
+  - **Probe incident:** an `ANALYZE TABLE` inside a probe committed implicitly and saved 1 user, 5 posts and 300 comments. All were removed as root right away; the count of remaining probe rows was checked as 0, and the 2 real comments were untouched.
