@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Exception\ValidationException;
 use App\Http\Session;
 use App\Service\VoteService;
 use Psr\Http\Message\ResponseFactoryInterface;
@@ -23,15 +24,19 @@ final class VoteController extends BaseController
     }
 
     /** @param array<string,string> $vars */
-    public function toggle(ServerRequestInterface $request, array $vars): ResponseInterface
+    public function vote(ServerRequestInterface $request, array $vars): ResponseInterface
     {
-        $slug = $this->body($request, ['slug'])['slug'];
-        $result = $this->votes->toggle($this->uuid($vars), $this->userId());
+        $input = $this->body($request, ['slug', 'voted']);
+        try {
+            $result = $this->votes->vote($this->uuid($vars), $this->userId(), $input['voted']);
+        } catch (ValidationException $e) {
+            return $this->respondInvalid($request, $e, null, [], $this->postPath($input['slug']));
+        }
 
         return $this->respond(
             $request,
             $result,
-            $this->postPath($slug),
+            $this->postPath($input['slug']),
             $result['voted'] ? 'Thanks for the upvote' : 'Upvote removed',
         );
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Exception\ValidationException;
+use App\Model\Role;
 use App\Model\User;
 use App\Repository\UserRepositoryInterface;
 use PDOException;
@@ -41,30 +42,24 @@ final class AuthService
         if (preg_match($this->passwordRegex, $password) !== 1) {
             $errors['password'] = 'Password needs ' . $this->passwordHint;
         }
-        if ($errors === [] && $this->users->findByEmail($email) !== null) {
-            $errors['email'] = 'This email is already registered';
-        }
         if ($errors !== []) {
             $this->logger->info('register invalid', ['event' => 'auth.register_invalid', 'ip' => $ip, 'user_id' => null]);
             throw new ValidationException($errors);
         }
 
+        $hash = password_hash($password, PASSWORD_ARGON2ID);
         try {
-            $id = $this->users->create($email, $name, password_hash($password, PASSWORD_ARGON2ID));
+            $id = $this->users->create($email, $name, $hash);
         } catch (PDOException $e) {
-            // Two sign-ups racing for one email: the UNIQUE key decides.
+            // The UNIQUE key on email decides (also when two sign-ups race).
             if (($e->errorInfo[1] ?? null) === 1062) {
+                $this->logger->info('register invalid', ['event' => 'auth.register_invalid', 'ip' => $ip, 'user_id' => null]);
                 throw new ValidationException(['email' => 'This email is already registered']);
             }
             throw $e;
         }
 
-        $user = $this->users->findById($id);
-        if ($user === null) {
-            throw new \RuntimeException('User vanished after insert');
-        }
-
-        return $user;
+        return new User($id, $email, $name, $hash, Role::User);
     }
 
     public function login(string $email, string $password, string $ip): User

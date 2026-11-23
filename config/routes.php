@@ -23,7 +23,7 @@ return static function ($r): void {
     $r->addRoute('POST', '/logout', [AuthController::class, 'logout', Role::User]);
 
     $r->addRoute('POST', '/posts/{id:' . UUID . '}/comments', [CommentController::class, 'store', Role::User]);
-    $r->addRoute('POST', '/posts/{id:' . UUID . '}/vote', [VoteController::class, 'toggle', Role::User]);
+    $r->addRoute('POST', '/posts/{id:' . UUID . '}/vote', [VoteController::class, 'vote', Role::User]);
     $r->addRoute('POST', '/comments/{id:' . UUID . '}', [CommentController::class, 'update', Role::User]);
     $r->addRoute('POST', '/comments/{id:' . UUID . '}/delete', [CommentController::class, 'destroy', Role::User]);
 

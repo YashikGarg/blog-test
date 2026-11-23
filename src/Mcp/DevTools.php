@@ -32,7 +32,7 @@ final readonly class DevTools
     /**
      * EXPLAIN one of the named repository queries.
      *
-     * @param string $name one of: list_published, list_published_after_cursor, search, admin_list, post_by_slug, post_by_id, slug_exists, upload_in_use, comments_for_post, vote_state, has_voted, login_lookup
+     * @param string $name one of: list_published, list_published_after_cursor, search, admin_list, post_by_slug, post_by_id, slug_family, uploads_in_use, comment_ids_page, comment_ids_page_after_cursor, comments_by_ids, vote_count, vote_published_count, has_voted, login_lookup
      */
     public function explainQuery(string $name): array
     {
@@ -56,10 +56,16 @@ final readonly class DevTools
             'admin_list' => [PdoPostRepository::ADMIN_LIST . PdoPostRepository::ADMIN_TAIL, ['limit' => 11]],
             'post_by_slug' => [PdoPostRepository::BY_SLUG, ['slug' => $slug]],
             'post_by_id' => [PdoPostRepository::BY_ID, ['id' => $postId]],
-            'slug_exists' => [PdoPostRepository::SLUG_EXISTS . ' LIMIT 1', ['slug' => $slug]],
-            'upload_in_use' => [PdoPostRepository::UPLOAD_IN_USE, ['path' => '/uploads/x.jpg', 'path2' => '/uploads/x.jpg']],
-            'comments_for_post' => [PdoCommentRepository::BY_POST, ['post' => $postId]],
-            'vote_state' => [PdoVoteRepository::STATE, ['u' => $userId, 'p' => $postId]],
+            'slug_family' => [PdoPostRepository::SLUG_FAMILY, ['base' => 'hello', 'prefix' => 'hello-%']],
+            'uploads_in_use' => [PdoPostRepository::UPLOADS_IN_USE, ['paths' => '["/uploads/a.jpg","/uploads/b.jpg"]']],
+            'comment_ids_page' => [PdoCommentRepository::IDS_PAGE . PdoCommentRepository::IDS_TAIL, ['post' => $postId, 'limit' => 31]],
+            'comment_ids_page_after_cursor' => [
+                PdoCommentRepository::IDS_PAGE . PdoCommentRepository::IDS_CURSOR . PdoCommentRepository::IDS_TAIL,
+                ['post' => $postId, 'ca' => $pub, 'ca2' => $pub, 'cid' => $postId, 'limit' => 31],
+            ],
+            'comments_by_ids' => [PdoCommentRepository::BY_IDS . '(UUID_TO_BIN(:id0), UUID_TO_BIN(:id1))', ['id0' => $postId, 'id1' => $userId]],
+            'vote_count' => [PdoVoteRepository::COUNT, ['p' => $postId]],
+            'vote_published_count' => [PdoVoteRepository::PUBLISHED_COUNT, ['p' => $postId]],
             'has_voted' => [PdoVoteRepository::HAS_VOTED, ['p' => $postId, 'u' => $userId]],
             'login_lookup' => [PdoLoginAttemptRepository::LOOKUP, ['k' => sha1('probe')]],
         ];

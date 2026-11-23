@@ -92,6 +92,8 @@ function settings(string $root): array
         'cache' => [
             'driver' => $e('CACHE_DRIVER', 'filesystem'),
             'ttl' => $int('CACHE_TTL', 86400),
+            // How long a cached vote count and the home list may lag behind the database (eventual consistency, accepted).
+            'count_ttl' => $int('CACHE_COUNT_TTL', 300),
         ],
         'twig_cache' => match (strtolower($e('TWIG_CACHE', 'false'))) {
             'false', '', '0' => false,
@@ -100,6 +102,7 @@ function settings(string $root): array
         },
         'posts_per_page' => $int('POSTS_PER_PAGE', 10),
         'comment_max_length' => $int('COMMENT_MAX_LENGTH', 2000),
+        'comments_per_page' => $int('COMMENTS_PER_PAGE', 30),
         'admin' => [
             'email' => $e('ADMIN_EMAIL'),
             'password' => $e('ADMIN_PASSWORD'),

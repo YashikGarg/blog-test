@@ -92,7 +92,7 @@ Use well-known Composer or npm packages for infrastructure: env, routing, DI, PS
   - It is guarded by `UNSIGNED` under strict mode, and checked for drift by MCP `verify_vote_counts`.
   - Child writes never touch the parent row, so `posts.updated_at` and the cache keys built from it stay correct.
 - Atomic counters (for example login failures) use one upsert, `INSERT … AS new ON DUPLICATE KEY UPDATE n = LAST_INSERT_ID(n + 1)`, and read the new value from `lastInsertId()`. Never read, modify, then write from PHP.
-- Avoid N+1 queries. A list page uses one query (JOIN or aggregate).
+- Avoid N+1 queries. A list page uses one query (JOIN or aggregate). Never call a repository inside a loop; batch with `IN (…)` or `JSON_TABLE`. A write that checks a condition is one conditional statement (`UPDATE … WHERE owner`, `INSERT … SELECT … WHERE published`), not a SELECT first.
 - Use **keyset pagination** for lists that grow (`WHERE (sort_col, id) < cursor ORDER BY sort_col DESC, id DESC LIMIT n+1`), backed by an index that matches the cursor. Don't use deep `OFFSET`. Bind `LIMIT` as an int.
 - **Concurrency rules** (verified with two live connections):
   - Isolation is `REPEATABLE-READ`, set in `docker/mysql/conf.d/app.cnf`. Never use `READ UNCOMMITTED`, so dirty reads are impossible.
@@ -377,11 +377,11 @@ Every FK is `ON DELETE RESTRICT`. Nothing is ever hard-deleted.
 | Method | Path | Handler | Role |
 |---|---|---|---|
 | GET | `/` (`?q=&cursor=`; keyset, no page numbers) | PostController::index (HTML, or JSON for AJAX search and Older posts) | - |
-| GET | `/posts/{slug}` | PostController::show | - |
+| GET | `/posts/{slug}` (`?comments_before=<cursor>`; keyset, 30 comments per page, newest first; JSON for AJAX "Older comments") | PostController::show | - |
 | GET/POST | `/login`, `/register` | AuthController | - (guest) |
 | POST | `/logout` | AuthController::logout | user |
 | POST | `/posts/{id:uuid}/comments` | CommentController::store | user |
-| POST | `/posts/{id:uuid}/vote` | VoteController::toggle (JSON, or redirect if no JS) | user |
+| POST | `/posts/{id:uuid}/vote` | VoteController::vote (body `voted=1\|0`: the state the user wants, so a double click cannot cancel the vote; JSON, or redirect if no JS) | user |
 | POST | `/comments/{id:uuid}` | CommentController::update (the service checks owner) | user |
 | POST | `/comments/{id:uuid}/delete` | CommentController::destroy: **soft delete** (the service checks owner or admin) | user |
 | GET | `/admin` (`?before=<uuid>`; keyset by id) | AdminPostController::index | admin |
@@ -393,11 +393,22 @@ Every FK is `ON DELETE RESTRICT`. Nothing is ever hard-deleted.
 
 ## B6. Environment variables (`.env.example`; `.env.local`, `.env.dev`, `.env.prod` override)
 
-`APP_ENV, APP_DEBUG, APP_URL, DB_HOST, DB_PORT (3308), DB_ROOT_PASS (Docker init only), DB_NAME, DB_USER, DB_PASS, DB_MIGRATE_USER, DB_MIGRATE_PASS, DB_SSL_CA, SESSION_NAME, SESSION_SECURE, SESSION_LIFETIME, PASSWORD_REGEX, PASSWORD_HINT, LOGIN_FREE_ATTEMPTS, LOGIN_IP_FREE_ATTEMPTS (20), LOGIN_BACKOFF_BASE_SECONDS, LOGIN_BACKOFF_MAX_SECONDS, UPLOAD_MAX_BYTES, UPLOAD_ALLOWED_MIMES, DEFAULT_COVER (/assets/default-cover.jpg), CACHE_DRIVER, CACHE_TTL, TWIG_CACHE, POSTS_PER_PAGE, COMMENT_MAX_LENGTH, ADMIN_EMAIL, ADMIN_PASSWORD`
+`APP_ENV, APP_DEBUG, APP_URL, DB_HOST, DB_PORT (3308), DB_ROOT_PASS (Docker init only), DB_NAME, DB_USER, DB_PASS, DB_MIGRATE_USER, DB_MIGRATE_PASS, DB_SSL_CA, SESSION_NAME, SESSION_SECURE, SESSION_LIFETIME, PASSWORD_REGEX, PASSWORD_HINT, LOGIN_FREE_ATTEMPTS, LOGIN_IP_FREE_ATTEMPTS (20), LOGIN_BACKOFF_BASE_SECONDS, LOGIN_BACKOFF_MAX_SECONDS, UPLOAD_MAX_BYTES, UPLOAD_ALLOWED_MIMES, DEFAULT_COVER (/assets/default-cover.jpg), CACHE_DRIVER, CACHE_TTL, CACHE_COUNT_TTL (300), TWIG_CACHE, POSTS_PER_PAGE, COMMENT_MAX_LENGTH, COMMENTS_PER_PAGE (30), ADMIN_EMAIL, ADMIN_PASSWORD`
 
 ## B7. Cache
 
-- Rendered markdown HTML: `CachedMarkdownRenderer` with the key `md.{postId}.{updatedAtTimestamp}`, so an edit makes a new key and nothing needs invalidating.
+All keys go through the PSR-16 `CacheInterface` (filesystem locally, APCu in prod). A write removes or overwrites the keys it makes stale, so nothing relies on guessing.
+
+| Key | Value | Written | Removed / refreshed |
+|---|---|---|---|
+| `post.{slug}` | `['post' => Post, 'html' => string]` | first published read | post update or delete (the service knows `$existing->slug`) |
+| `posts.home` | the `listPublished(null, null)` array | first read, TTL `CACHE_COUNT_TTL` | any post create, update or delete |
+| `votes.{postId}` | int count | after every vote (the DB's count, never an increment), TTL `CACHE_COUNT_TTL` | overwritten by the next vote |
+| `comment.{id}` | `Comment` | after add/edit, and on a cache miss in a list | **deleted** on comment delete; overwritten on edit |
+| `md.{postId}.{updatedAtTimestamp}` | rendered markdown HTML (`CachedMarkdownRenderer`) | on a render | never (an edit makes a new key) |
+
+- The comment **id list is never cached**: two concurrent pushes into a cached array would lose an id (read → append → write back is not atomic). The ids come from the DB on every view through an index-only query. Deleted comments disappear because that query filters `status = 'visible'`.
+- The count on cards (`posts.home`) and the vote count can lag by up to `CACHE_COUNT_TTL` (user accepted eventual consistency). The post page shows `votes.{postId}`.
 - The editor preview is **not** cached. It passes a `null` cache key, because every keystroke is a new text.
 - Twig compiled templates (`TWIG_CACHE`), the PHP-DI compiled container, and OPcache in prod.
 - Login throttle state is **not** cached. It lives in the `login_attempts` table, because it must be atomic and durable.
@@ -573,7 +584,7 @@ composer serve                       # php -S localhost:8000 -t public public/in
   - **Live data:** the user's own "Remove cover" on `tesing-new` deleted its unused files. The only unused file in `public/uploads/` is the pre-003 orphan `e48a335f….jpg`, a known gap.
   - Fixed the stale §B5 delete row.
   - **Low, left as is:** `pathsIn` also matches `/uploads/<hex>.<ext>` inside an external URL. That only makes the path a candidate, and `isUploadInUse` still protects any file a live post uses.
-- 2026-11-23 (user review; **planned**, see `docs/CHANGES_004.md`, about 25 min with 3 parallel streams): change set 004, fewer queries plus real caching.
+- 2026-11-23 (user review; **done**, see `docs/CHANGES_004.md`, 3 parallel streams): change set 004, fewer queries plus real caching. The implementation result and the one deviation are the last bullets of this entry.
   - **Found with `acc:detect-n-plus-one` and `acc:check-query-efficiency`:**
     - two queries in a loop: `deleteUnused` ran one query per image, and `uniqueSlug` one per suffix;
     - check-then-act extra reads on vote (4 statements), comment add/edit/delete (3/3/2) and register (3);
@@ -589,3 +600,9 @@ composer serve                       # php -S localhost:8000 -t public public/in
     - **Declined:** a `COALESCE(:x, col)` partial update. It can't set NULL (remove-cover, draft `published_at`), and a primary-key UPDATE costs the same.
   - **Verified on Docker MySQL 8.4** as `inkwell_app` in rolled-back transactions; the results are in the doc, §6.
   - **Probe incident:** an `ANALYZE TABLE` inside a probe committed implicitly and saved 1 user, 5 posts and 300 comments. All were removed as root right away; the count of remaining probe rows was checked as 0, and the 2 real comments were untouched.
+  - **Implementation result (streams A, B and M, then the join):**
+    - **Gates:** `composer test` 33 green (26 → 33); `npm run typecheck`, `npm run build`, `composer audit` and `npm audit --omit=dev` clean; `unlink(` only in `ImageUploader::delete`; no repository call inside a loop in `src/Service` (grep clean); every removed name (`isUploadInUse`, `slugExists`, `toggle`, `findVisibleByPost`, `STATE`) is gone from `src/`, `config/`, `tests/` and `bin/`.
+    - **Process (the §0 rules):** A and B ran as subagents. Both reports opened with the "Skills invoked" line, each with a finding or "clean", and both used the MCP tools `db_schema` and `list_routes`. The main agent still reviewed every diff against the doc: the SQL constants, the 100-id cap, the cursor, the controllers, the view and the TS in A, and the guarded upsert, the validate-before-write order and the one-query register in B all matched. M ran `acc:detect-n-plus-one`, `acc:check-query-efficiency` and `acc:caching-strategies-knowledge` before its code.
+    - **EXPLAIN** (run through `DevTools` directly; the MCP server must be reconnected with `/mcp` to see the new names): `comment_ids_page` and `comment_ids_page_after_cursor` use `idx_comments_post_status_created` with a backward, index-only scan and no filesort; `comments_by_ids` is `range PRIMARY`; `slug_family` is `range uq_posts_slug`; `vote_count` and `vote_published_count` are `const PRIMARY`; `uploads_in_use` is the accepted hash-join plan. The list queries keep their index plans on a 300-post dataset (a 2-user dataset shows the known tiny-table artifact). `verify_constraints` 15/15; `verify_vote_counts` `[]`.
+    - **Live smoke test over HTTP (40 checks)** and **browser test at 390 px (13 checks, 0 page errors):** votes on, on again, off (+1, unchanged, −1; a double click votes once and does not cancel), a vote on a draft gives 404, `voted` missing or invalid gives 422, the counter equals the real active votes; comment add, edit (also with the same text), delete (owner or admin; non-owner 403; repeat 404) and a deleted comment never reappears; 35 comments give 30 newest first plus "Older comments" with 5 more; an edit to a post shows at once; a save with no changes keeps `updated_at`; a register with a duplicate email gives 422 from the UNIQUE key. **Query counts, warm cache:** a guest post page 3 → 1 SELECT, home page 1 → 0. All test rows and cache files were removed, and the user's data was identical before and after (2 users, 3 posts, 2 comments, 1 vote).
+  - **Deviation from the change set:** `PdoVoteRepository::write()` reads `lastInsertId()` right after the counter `UPDATE`, **before** `COMMIT`. The doc's code read it after `COMMIT`, and PDO returns 0 then (proved: 1 inside the transaction, 0 after the commit), so the vote response showed count 0 although the stored count was right. The SQL in the doc's §6 was verified, but not the PDO call that follows the commit.

@@ -73,14 +73,21 @@ final class AuthServiceTest extends TestCase
 
     public function test_register_rejects_duplicate_email(): void
     {
-        $users = $this->createMock(UserRepositoryInterface::class);
-        $users->method('findByEmail')->willReturn($this->user('whatever-pass'));
-        $users->expects(self::never())->method('create');
+        $users = $this->createStub(UserRepositoryInterface::class);
+        $users->method('create')->willThrowException($this->duplicateEmailError());
         $service = $this->service($users);
 
         $errors = $this->errorsFrom(static fn () => $service->register('ann@example.com', 'Ann', 'long-enough-pass'));
 
         self::assertArrayHasKey('email', $errors);
+    }
+
+    private function duplicateEmailError(): \PDOException
+    {
+        $e = new \PDOException('Duplicate entry');
+        $e->errorInfo = ['23000', 1062, 'Duplicate'];
+
+        return $e;
     }
 
     /** The field errors of the ValidationException the call throws (fails the test if it throws nothing). */

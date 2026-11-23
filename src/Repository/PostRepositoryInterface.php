@@ -29,11 +29,20 @@ interface PostRepositoryInterface
      */
     public function findForAdmin(?string $beforeId, int $limit): array;
 
-    /** Slugs stay reserved after a soft delete, so deleted rows count too. */
-    public function slugExists(string $slug, ?string $exceptId): bool;
+    /**
+     * Every slug that is $base or starts with "$base-" (deleted rows count: a slug stays reserved after a soft delete).
+     *
+     * @return list<string>
+     */
+    public function slugsLike(string $base): array;
 
-    /** True when a draft or published post uses this public path (e.g. /uploads/x.jpg) as its cover or inside its body. */
-    public function isUploadInUse(string $publicPath): bool;
+    /**
+     * Which of these upload paths a post that is not deleted still uses, as its cover or inside its body. One query for all paths.
+     *
+     * @param list<string> $paths
+     * @return list<string> the subset still in use
+     */
+    public function uploadsInUse(array $paths): array;
 
     /**
      * Inserts the post and its vote-counter row in one transaction.

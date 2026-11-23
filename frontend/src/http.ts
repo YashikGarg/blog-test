@@ -24,6 +24,7 @@ export interface PostCard {
 
 export interface VoteResult { ok: true; voted: boolean; count: number }
 export interface CommentResult { ok: true; comment: CommentData }
+export interface CommentPage { ok: true; comments: CommentData[]; nextCommentCursor: string | null }
 export interface Deleted { ok: true; id: string }
 export interface PostPage { ok: true; posts: PostCard[]; nextCursor: string | null }
 export interface MediaResult { ok: true; url: string; markdown: string }
@@ -77,6 +78,13 @@ export const isVoteResult: Guard<VoteResult> = (v): v is VoteResult =>
 
 export const isCommentResult: Guard<CommentResult> = (v): v is CommentResult =>
   isRecord(v) && v['ok'] === true && isCommentData(v['comment']);
+
+export const isCommentPage: Guard<CommentPage> = (v): v is CommentPage =>
+  isRecord(v) &&
+  v['ok'] === true &&
+  Array.isArray(v['comments']) &&
+  v['comments'].every(isCommentData) &&
+  (v['nextCommentCursor'] === null || typeof v['nextCommentCursor'] === 'string');
 
 export const isDeleted: Guard<Deleted> = (v): v is Deleted =>
   isRecord(v) && v['ok'] === true && typeof v['id'] === 'string';

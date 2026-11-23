@@ -57,8 +57,10 @@ final class CommentController extends BaseController
     /** @param array<string,string> $vars */
     public function destroy(ServerRequestInterface $request, array $vars): ResponseInterface
     {
-        $comment = $this->comments->delete($this->uuid($vars), $this->userId(), $this->role());
+        $input = $this->body($request, ['slug']);
+        $id = $this->uuid($vars);
+        $this->comments->delete($id, $this->userId(), $this->role());
 
-        return $this->respond($request, ['id' => $comment->id], $this->postPath($comment->postSlug, '#comments'), 'Comment deleted');
+        return $this->respond($request, ['id' => $id], $this->postPath($input['slug'], '#comments'), 'Comment deleted');
     }
 }

@@ -16,6 +16,7 @@
       <form action="/posts/{{ post.id }}/vote" method="post" data-ajax="vote">
         <input type="hidden" name="_csrf" value="{{ csrf }}">
         <input type="hidden" name="slug" value="{{ post.slug }}">
+        <input type="hidden" name="voted" value="{{ voted ? '0' : '1' }}" data-vote-wanted>
         <button class="btn btn--secondary" type="submit" aria-pressed="{{ voted ? 'true' : 'false' }}">Upvote <span data-vote-count>{{ post.upvotes }}</span></button>
         <p class="form__status" role="status" data-form-status></p>
       </form>
@@ -60,6 +61,7 @@
         </li>
         {% endfor %}
       </ul>
+      {% if nextCommentCursor %}<nav class="pager" aria-label="Comment pages"><a class="btn btn--secondary" data-load-more-comments href="/posts/{{ post.slug }}?comments_before={{ nextCommentCursor|url_encode }}#comments">Older comments</a></nav>{% endif %}
 
       {% if currentUser %}
       <form action="/posts/{{ post.id }}/comments" method="post" data-ajax="comment-create" class="stack comment-form">

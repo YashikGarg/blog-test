@@ -152,16 +152,23 @@ function buildContainer(array $settings): ContainerInterface
             $c->get(PostRepositoryInterface::class),
             $c->get(MarkdownRendererInterface::class),
             $c->get(ImageUploader::class),
+            $c->get(CacheInterface::class),
             $c->get('settings')['posts_per_page'],
+            $c->get('settings')['cache']['count_ttl'],
         )),
 
         CommentService::class => factory(fn(ContainerInterface $c) => new CommentService(
             $c->get(CommentRepositoryInterface::class),
-            $c->get(PostRepositoryInterface::class),
+            $c->get(CacheInterface::class),
             $c->get('settings')['comment_max_length'],
+            $c->get('settings')['comments_per_page'],
         )),
 
-        VoteService::class => autowire(),
+        VoteService::class => factory(fn(ContainerInterface $c) => new VoteService(
+            $c->get(VoteRepositoryInterface::class),
+            $c->get(CacheInterface::class),
+            $c->get('settings')['cache']['count_ttl'],
+        )),
 
         Session::class => autowire(),
 

@@ -14,6 +14,8 @@ use App\Service\PostService;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use Symfony\Component\Cache\Psr16Cache;
 
 #[Group('unit')]
 #[CoversClass(PostService::class)]
@@ -22,15 +24,15 @@ final class PostServiceTest extends TestCase
     /** A generated upload name is 32 hex characters plus the extension; ImageUploader::delete ignores anything else. */
     private const OLD_FILE = '0123456789abcdef0123456789abcdef.png';
 
+    /** @var list<string> */
+    private array $tempDirs = [];
+
     public function test_create_adds_suffix_when_slug_is_taken(): void
     {
         $posts = $this->createMock(PostRepositoryInterface::class);
-        $posts->method('slugExists')->willReturnMap([
-            ['hello-world', null, true],
-            ['hello-world-2', null, false],
-        ]);
+        $posts->method('slugsLike')->willReturn(['hello-world', 'hello-world-2']);
         $posts->expects(self::once())->method('create')
-            ->with(self::callback(static fn (array $data): bool => $data['slug'] === 'hello-world-2'))
+            ->with(self::callback(static fn (array $data): bool => $data['slug'] === 'hello-world-3'))
             ->willReturn('new-id');
         $service = $this->service($posts);
 
@@ -56,7 +58,7 @@ final class PostServiceTest extends TestCase
         file_put_contents($dir . '/' . self::OLD_FILE, 'png');
         $posts = $this->createMock(PostRepositoryInterface::class);
         $posts->method('findById')->willReturn($this->post('/uploads/' . self::OLD_FILE));
-        $posts->method('isUploadInUse')->willReturn(false);
+        $posts->method('uploadsInUse')->willReturn([]);
         $posts->expects(self::once())->method('update')
             ->with('post-1', self::callback(static fn (array $data): bool => $data['cover_image'] === null));
         $service = $this->service($posts, $dir);
@@ -72,12 +74,46 @@ final class PostServiceTest extends TestCase
         file_put_contents($dir . '/' . self::OLD_FILE, 'png');
         $posts = $this->createStub(PostRepositoryInterface::class);
         $posts->method('findById')->willReturn($this->post('/uploads/' . self::OLD_FILE));
-        $posts->method('isUploadInUse')->willReturn(true);
+        $posts->method('uploadsInUse')->willReturn(['/uploads/' . self::OLD_FILE]);
         $service = $this->service($posts, $dir);
 
         $service->update('post-1', ['title' => 'T', 'body' => 'B', 'status' => 'draft', 'excerpt' => '', 'remove_cover' => '1'], null);
 
         self::assertFileExists($dir . '/' . self::OLD_FILE);
+    }
+
+    public function test_update_without_changes_writes_nothing(): void
+    {
+        $posts = $this->createMock(PostRepositoryInterface::class);
+        $posts->method('findById')->willReturn($this->post(null));
+        $posts->expects(self::never())->method('update');
+        $service = $this->service($posts);
+
+        $service->update('post-1', ['title' => 'Title', 'body' => 'body', 'status' => 'draft', 'excerpt' => ''], null);
+    }
+
+    public function test_published_post_is_read_once_then_served_from_cache(): void
+    {
+        $posts = $this->createMock(PostRepositoryInterface::class);
+        $posts->expects(self::once())->method('findBySlug')->willReturn($this->post(null, PostStatus::Published));
+        $service = $this->service($posts);
+
+        $service->getPublishedBySlug('title');
+        $second = $service->getPublishedBySlug('title');
+
+        self::assertSame('Title', $second['post']->title);
+    }
+
+    public function test_update_clears_the_cached_post(): void
+    {
+        $posts = $this->createMock(PostRepositoryInterface::class);
+        $posts->method('findById')->willReturn($this->post(null, PostStatus::Published));
+        $posts->expects(self::exactly(2))->method('findBySlug')->willReturn($this->post(null, PostStatus::Published));
+        $service = $this->service($posts);
+        $service->getPublishedBySlug('title');
+
+        $service->update('post-1', ['title' => 'New title', 'body' => 'body', 'status' => 'published', 'excerpt' => ''], null);
+        $service->getPublishedBySlug('title');
     }
 
     protected function tearDown(): void
@@ -89,9 +125,6 @@ final class PostServiceTest extends TestCase
         $this->tempDirs = [];
     }
 
-    /** @var list<string> */
-    private array $tempDirs = [];
-
     private function tempDir(): string
     {
         $dir = sys_get_temp_dir() . '/inkwell-' . bin2hex(random_bytes(6));
@@ -101,15 +134,15 @@ final class PostServiceTest extends TestCase
         return $dir;
     }
 
-    private function post(?string $cover): Post
+    private function post(?string $cover, PostStatus $status = PostStatus::Draft): Post
     {
-        return new Post('post-1', 'a-1', 'Author', 'Title', 'title', '', 'body', $cover, PostStatus::Draft, 0, null, '2026-01-01 00:00:00');
+        return new Post('post-1', 'a-1', 'Author', 'Title', 'title', '', 'body', $cover, $status, 0, null, '2026-01-01 00:00:00');
     }
 
     private function service(PostRepositoryInterface $posts, ?string $uploadDir = null): PostService
     {
         $uploader = new ImageUploader($uploadDir ?? sys_get_temp_dir() . '/inkwell-unused', '/uploads/', 1048576, ['image/png']);
 
-        return new PostService($posts, $this->createStub(MarkdownRendererInterface::class), $uploader, 10);
+        return new PostService($posts, $this->createStub(MarkdownRendererInterface::class), $uploader, new Psr16Cache(new ArrayAdapter()), 10, 300);
     }
 }

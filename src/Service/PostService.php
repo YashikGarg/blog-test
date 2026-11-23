@@ -9,16 +9,22 @@ use App\Exception\ValidationException;
 use App\Model\Post;
 use App\Model\PostStatus;
 use App\Repository\PostRepositoryInterface;
+use PDOException;
 use Psr\Http\Message\UploadedFileInterface;
+use Psr\SimpleCache\CacheInterface;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class PostService
 {
+    private const HOME_KEY = 'posts.home';
+
     public function __construct(
         private PostRepositoryInterface $posts,
         private MarkdownRendererInterface $markdown,
         private ImageUploader $uploader,
+        private CacheInterface $cache,
         private int $perPage,
+        private int $listTtl,
     ) {
     }
 
@@ -28,24 +34,50 @@ final readonly class PostService
         $q = $q === null ? null : mb_substr(trim($q), 0, 100);
         $q = $q === '' ? null : $q;
 
-        $rows = $this->posts->findPublished($this->perPage + 1, $q, $this->decodeCursor($cursor));
+        $before = $this->decodeCursor($cursor);
+        // Only the first page without a search is cached (an invalid cursor counts as the first page). Counts on the cards may lag by the TTL.
+        $cacheable = $q === null && $before === null;
+        if ($cacheable) {
+            $cached = $this->cache->get(self::HOME_KEY);
+            if (is_array($cached)) {
+                return $cached;
+            }
+        }
+
+        $rows = $this->posts->findPublished($this->perPage + 1, $q, $before);
         $hasMore = count($rows) > $this->perPage;
         $posts = array_slice($rows, 0, $this->perPage);
         $last = $posts === [] ? null : end($posts);
 
-        return [
+        $page = [
             'posts' => $posts,
             'nextCursor' => $hasMore && $last !== null && $last->publishedAt !== null ? $this->encodeCursor($last) : null,
             'q' => $q,
         ];
+        if ($cacheable) {
+            $this->cache->set(self::HOME_KEY, $page, $this->listTtl);
+        }
+
+        return $page;
     }
 
     /** @return array{post: Post, html: string} */
     public function getPublishedBySlug(string $slug): array
     {
-        $post = $this->posts->findBySlug($slug) ?? throw new NotFoundException('Post not found');
+        // A slug that cannot exist is a 404 with no query, and it keeps the cache key safe.
+        if (preg_match('/^[a-z0-9-]{1,220}$/', $slug) !== 1) {
+            throw new NotFoundException('Post not found');
+        }
+        $cached = $this->cache->get('post.' . $slug);
+        if (is_array($cached) && ($cached['post'] ?? null) instanceof Post && is_string($cached['html'] ?? null)) {
+            return ['post' => $cached['post'], 'html' => $cached['html']];
+        }
 
-        return ['post' => $post, 'html' => $this->render($post)];
+        $post = $this->posts->findBySlug($slug) ?? throw new NotFoundException('Post not found');
+        $page = ['post' => $post, 'html' => $this->render($post)];
+        $this->cache->set('post.' . $slug, $page); // removed by update() and delete()
+
+        return $page;
     }
 
     /** Admin list: draft and published, keyset on id. @return array{posts: list<Post>, nextBefore: ?string} */
@@ -70,12 +102,23 @@ final readonly class PostService
         $data = $this->validate($input);
         $coverPath = $this->hasUpload($cover) ? $this->uploader->store($cover) : null;
 
-        return $this->posts->create($data + [
+        $row = $data + [
             'author_id' => $authorId,
-            'slug' => $this->uniqueSlug($data['title']),
             'cover_image' => $coverPath,
             'published_at' => $data['status'] === PostStatus::Published->value ? gmdate('Y-m-d H:i:s') : null,
-        ]);
+        ];
+        try {
+            $id = $this->posts->create($row + ['slug' => $this->uniqueSlug($data['title'])]);
+        } catch (PDOException $e) {
+            // Two posts with the same title saved at the same moment: the UNIQUE slug refuses the second. Look again and retry once.
+            if (($e->errorInfo[1] ?? null) !== 1062) {
+                throw $e;
+            }
+            $id = $this->posts->create($row + ['slug' => $this->uniqueSlug($data['title'])]);
+        }
+        $this->cache->delete(self::HOME_KEY);
+
+        return $id;
     }
 
     /** @param array<string,string> $input title, body, status, excerpt */
@@ -87,6 +130,15 @@ final readonly class PostService
         $removeCover = ($input['remove_cover'] ?? '') === '1';
         $newCoverValue = $newCover ?? ($removeCover ? null : $existing->coverImage);
 
+        // Nothing changed: no write (so updated_at stays), no file deletes, no cache change.
+        if ($data['title'] === $existing->title
+            && $data['body_md'] === $existing->bodyMd
+            && $data['excerpt'] === $existing->excerpt
+            && $data['status'] === $existing->status->value
+            && $newCoverValue === $existing->coverImage) {
+            return;
+        }
+
         $this->posts->update($id, $data + [
             // A new upload wins over the checkbox. Unused old files are deleted after the write (deleteUnused).
             'cover_image' => $newCoverValue,
@@ -94,6 +146,8 @@ final readonly class PostService
             'published_at' => $existing->publishedAt
                 ?? ($data['status'] === PostStatus::Published->value ? gmdate('Y-m-d H:i:s') : null),
         ]);
+
+        $this->cache->deleteMultiple(['post.' . $existing->slug, self::HOME_KEY]);
 
         // Images the post no longer references: the replaced or removed cover, and inline images dropped from the body.
         $candidates = array_diff($this->uploader->pathsIn($existing->bodyMd), $this->uploader->pathsIn($data['body_md']));
@@ -116,6 +170,7 @@ final readonly class PostService
         if (!$this->posts->softDelete($id, $actorId)) {
             throw new NotFoundException('Post not found');
         }
+        $this->cache->deleteMultiple(['post.' . $post->slug, self::HOME_KEY]);
         // The post is 'deleted' now, so it no longer counts as using its images.
         $this->deleteUnused([...$this->uploader->pathsIn($post->bodyMd), ...($post->coverImage !== null ? [$post->coverImage] : [])]);
     }
@@ -154,10 +209,10 @@ final readonly class PostService
     /** @param list<string> $candidates paths the post no longer references; each is deleted unless another live post uses it */
     private function deleteUnused(array $candidates): void
     {
-        foreach (array_unique($candidates) as $path) {
-            if (!$this->posts->isUploadInUse($path)) {
-                $this->uploader->delete($path);
-            }
+        $candidates = array_values(array_unique($candidates));
+        $used = $this->posts->uploadsInUse($candidates);
+        foreach (array_diff($candidates, $used) as $path) {
+            $this->uploader->delete($path);
         }
     }
 
@@ -172,8 +227,9 @@ final readonly class PostService
         $base = trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower($ascii === false ? '' : $ascii)), '-');
         $base = $base === '' ? 'post' : substr($base, 0, 200);
 
+        $taken = $this->posts->slugsLike($base);
         $slug = $base;
-        for ($n = 2; $this->posts->slugExists($slug, null); $n++) {
+        for ($n = 2; in_array($slug, $taken, true); $n++) {
             $slug = $base . '-' . $n;
         }
 

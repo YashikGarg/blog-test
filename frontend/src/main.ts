@@ -3,6 +3,7 @@ import {
   HttpError,
   ValidationError,
   defaultCover,
+  isCommentPage,
   isCommentResult,
   isDeleted,
   isInternalPath,
@@ -226,6 +227,8 @@ const handlers: Record<string, Handler> = {
     const count = form.querySelector('[data-vote-count]');
     if (count) count.textContent = String(r.count);
     form.querySelector('button[type="submit"]')?.setAttribute('aria-pressed', String(r.voted));
+    const wanted = form.querySelector<HTMLInputElement>('[data-vote-wanted]');
+    if (wanted) wanted.value = r.voted ? '0' : '1';
     setStatus(form, r.voted ? 'Upvoted.' : 'Upvote removed.');
   },
 
@@ -235,7 +238,7 @@ const handlers: Record<string, Handler> = {
     const list = document.getElementById('comment-list');
     if (li && list) {
       fillComment(li, r.comment);
-      list.append(li);
+      list.prepend(li);
       const empty = document.getElementById('no-comments');
       if (empty) empty.hidden = true;
     }
@@ -339,6 +342,39 @@ document.addEventListener('click', (event) => {
       updateLoadMore(r.nextCursor, new URL(href, location.origin).searchParams.get('q') ?? '');
     } catch (err) {
       setStatus(null, err instanceof HttpError ? err.message : 'The network failed. Try again.');
+    }
+  })();
+});
+
+// "Older comments": fetch the link's own URL as JSON and append below the loaded ones.
+document.addEventListener('click', (event) => {
+  const target = event.target;
+  const link = target instanceof Element ? target.closest<HTMLAnchorElement>('a[data-load-more-comments]') : null;
+  if (link === null) return;
+  const href = link.getAttribute('href') ?? '';
+  if (!isInternalPath(href)) return;
+  event.preventDefault();
+  void (async () => {
+    try {
+      const r = await send(href, { method: 'GET' }, isCommentPage);
+      const list = document.getElementById('comment-list');
+      if (list) {
+        for (const c of r.comments) {
+          const li = cloneTemplate('comment-tpl');
+          if (li === null) continue;
+          fillComment(li, c);
+          list.append(li);
+        }
+      }
+      if (r.nextCommentCursor === null) {
+        link.closest('nav')?.remove();
+      } else {
+        const params = new URLSearchParams({ comments_before: r.nextCommentCursor });
+        const path = new URL(href, location.origin).pathname;
+        link.setAttribute('href', `${path}?${params.toString()}#comments`);
+      }
+    } catch (err) {
+      setStatus(document.getElementById('comments'), err instanceof HttpError ? err.message : 'The network failed. Try again.');
     }
   })();
 });

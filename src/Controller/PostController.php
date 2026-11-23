@@ -53,11 +53,20 @@ final class PostController extends BaseController
     {
         ['post' => $post, 'html' => $html] = $this->posts->getPublishedBySlug($vars['slug'] ?? '');
         $userId = $this->session->userId();
+        $query = $request->getQueryParams();
+        $cursor = is_string($query['comments_before'] ?? null) ? $query['comments_before'] : null;
+        $page = $this->comments->listForPost($post->id, $cursor);
+        $comments = array_map($this->commentView(...), $page['comments']);
+
+        if ($cursor !== null && $this->wantsJson($request)) {
+            return $this->json(['ok' => true, 'comments' => $comments, 'nextCommentCursor' => $page['nextCursor']]);
+        }
 
         return $this->render('post/show.twig', [
-            'post' => $this->card($post) + ['id' => $post->id],
+            'post' => array_replace($this->card($post), ['id' => $post->id, 'upvotes' => $this->votes->count($post->id)]),
             'html' => $html,
-            'comments' => array_map(fn($c) => $this->commentView($c), $this->comments->listForPost($post->id)),
+            'comments' => $comments,
+            'nextCommentCursor' => $page['nextCursor'],
             'voted' => $userId !== null && $this->votes->hasVoted($post->id, $userId),
             'errors' => [],
             'old' => [],

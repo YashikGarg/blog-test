@@ -11,47 +11,45 @@ use Symfony\Component\Uid\Uuid;
 final readonly class PdoPostRepository implements PostRepositoryInterface
 {
     // Static SQL pieces. The cursor and search clauses are appended by code; their values are always bound.
-    private const LIST_COLUMNS = "SELECT BIN_TO_UUID(p.id) AS id, BIN_TO_UUID(p.author_id) AS author_id, u.name AS author_name,
-        p.title, p.slug, p.excerpt, '' AS body_md, p.cover_image, p.status,
+    // The post columns are written once: the body column goes between the two halves ('' for lists, the real text for one post).
+    private const POST_COLUMNS_1 = 'SELECT BIN_TO_UUID(p.id) AS id, BIN_TO_UUID(p.author_id) AS author_id, u.name AS author_name,
+        p.title, p.slug, p.excerpt, ';
+    private const POST_COLUMNS_2 = ', p.cover_image, p.status,
         COALESCE(c.upvotes, 0) AS upvotes, p.published_at, p.updated_at
-        FROM posts p";
-    private const LIST_JOINS = " JOIN users u ON u.id = p.author_id LEFT JOIN post_vote_counts c ON c.post_id = p.id
-        WHERE p.status = 'published'";
+        FROM posts p';
+    private const POST_JOINS = ' JOIN users u ON u.id = p.author_id LEFT JOIN post_vote_counts c ON c.post_id = p.id';
+
+    /** List rows carry no body ('' AS body_md): cards do not need it. */
+    public const POST_SELECT_LIST = self::POST_COLUMNS_1 . "'' AS body_md" . self::POST_COLUMNS_2 . self::POST_JOINS;
+    /** One post with its body. */
+    public const POST_SELECT_FULL = self::POST_COLUMNS_1 . 'p.body_md AS body_md' . self::POST_COLUMNS_2 . self::POST_JOINS;
 
     /** The list used for search: MySQL picks the FULLTEXT index itself. */
-    public const LIST = self::LIST_COLUMNS . self::LIST_JOINS;
+    public const LIST = self::POST_SELECT_LIST . " WHERE p.status = 'published'";
     /**
      * The newest-first list (no search). Nearly every post is 'published', so the optimizer judges the index no cheaper
      * than a scan and sorts every row (EXPLAIN: type ALL, Using filesort). With LIMIT the index is far cheaper,
      * so the status/date index is named: backward index scan, no filesort. Not used for search (it would hide the FULLTEXT index).
      */
-    public const LIST_BY_DATE = self::LIST_COLUMNS . ' FORCE INDEX (idx_posts_status_published)' . self::LIST_JOINS;
+    public const LIST_BY_DATE = self::POST_COLUMNS_1 . "'' AS body_md" . self::POST_COLUMNS_2
+        . ' FORCE INDEX (idx_posts_status_published)' . self::POST_JOINS . " WHERE p.status = 'published'";
     public const CURSOR = ' AND (p.published_at < :pa OR (p.published_at = :pa2 AND p.id < UUID_TO_BIN(:id)))';
     public const SEARCH = ' AND MATCH(p.title, p.body_md) AGAINST (:q IN NATURAL LANGUAGE MODE)';
     public const LIST_TAIL = ' ORDER BY p.published_at DESC, p.id DESC LIMIT :limit';
 
-    public const BY_SLUG = "SELECT BIN_TO_UUID(p.id) AS id, BIN_TO_UUID(p.author_id) AS author_id, u.name AS author_name,
-        p.title, p.slug, p.excerpt, p.body_md AS body_md, p.cover_image, p.status,
-        COALESCE(c.upvotes, 0) AS upvotes, p.published_at, p.updated_at
-        FROM posts p JOIN users u ON u.id = p.author_id LEFT JOIN post_vote_counts c ON c.post_id = p.id
-        WHERE p.slug = :slug AND p.status = 'published'";
-    public const BY_ID = "SELECT BIN_TO_UUID(p.id) AS id, BIN_TO_UUID(p.author_id) AS author_id, u.name AS author_name,
-        p.title, p.slug, p.excerpt, p.body_md AS body_md, p.cover_image, p.status,
-        COALESCE(c.upvotes, 0) AS upvotes, p.published_at, p.updated_at
-        FROM posts p JOIN users u ON u.id = p.author_id LEFT JOIN post_vote_counts c ON c.post_id = p.id
-        WHERE p.id = UUID_TO_BIN(:id) AND p.status <> 'deleted'";
-    public const ADMIN_LIST = "SELECT BIN_TO_UUID(p.id) AS id, BIN_TO_UUID(p.author_id) AS author_id, u.name AS author_name,
-        p.title, p.slug, p.excerpt, '' AS body_md, p.cover_image, p.status,
-        COALESCE(c.upvotes, 0) AS upvotes, p.published_at, p.updated_at
-        FROM posts p JOIN users u ON u.id = p.author_id LEFT JOIN post_vote_counts c ON c.post_id = p.id
-        WHERE p.status IN ('draft', 'published')";
+    public const BY_SLUG = self::POST_SELECT_FULL . " WHERE p.slug = :slug AND p.status = 'published'";
+    public const BY_ID = self::POST_SELECT_FULL . " WHERE p.id = UUID_TO_BIN(:id) AND p.status <> 'deleted'";
+    public const ADMIN_LIST = self::POST_SELECT_LIST . " WHERE p.status IN ('draft', 'published')";
     public const ADMIN_CURSOR = ' AND p.id < UUID_TO_BIN(:before)';
     public const ADMIN_TAIL = ' ORDER BY p.id DESC LIMIT :limit';
-    public const SLUG_EXISTS = 'SELECT 1 FROM posts WHERE slug = :slug';
-    public const SLUG_EXISTS_EXCEPT = ' AND id <> UUID_TO_BIN(:except)';
-    public const UPLOAD_IN_USE = "SELECT 1 FROM posts
-        WHERE status <> 'deleted' AND (cover_image = :path OR LOCATE(:path2, body_md) > 0)
-        LIMIT 1";
+    /** Every slug of one family: the base itself and base-N. One query, however many suffixes are taken. */
+    public const SLUG_FAMILY = 'SELECT slug FROM posts WHERE slug = :base OR slug LIKE :prefix';
+    /**
+     * Which of the given upload paths a live post still uses (as its cover or inside its body): one pass for all paths.
+     * The COLLATE is required: JSON_TABLE yields utf8mb4_0900 text, posts use utf8mb4_unicode_ci (error 1267 otherwise).
+     */
+    public const UPLOADS_IN_USE = "SELECT j.path FROM JSON_TABLE(:paths, '\$[*]' COLUMNS (path VARCHAR(255) COLLATE utf8mb4_unicode_ci PATH '\$')) AS j
+        WHERE EXISTS (SELECT 1 FROM posts p WHERE p.status <> 'deleted' AND (p.cover_image = j.path OR LOCATE(j.path, p.body_md) > 0))";
 
     public function __construct(private PDO $pdo)
     {
@@ -110,26 +108,27 @@ final readonly class PdoPostRepository implements PostRepositoryInterface
         return array_map(Post::fromRow(...), $stmt->fetchAll());
     }
 
-    public function slugExists(string $slug, ?string $exceptId): bool
+    public function slugsLike(string $base): array
     {
-        $stmt = $this->pdo->prepare(self::SLUG_EXISTS . ($exceptId !== null ? self::SLUG_EXISTS_EXCEPT : '') . ' LIMIT 1');
-        $stmt->bindValue(':slug', $slug);
-        if ($exceptId !== null) {
-            $stmt->bindValue(':except', $exceptId);
-        }
+        $stmt = $this->pdo->prepare(self::SLUG_FAMILY);
+        $stmt->bindValue(':base', $base);
+        // LIKE wildcards in the base are escaped, so "probe_hello" never matches "probe-hello".
+        $stmt->bindValue(':prefix', addcslashes($base, '%_\\') . '-%');
         $stmt->execute();
 
-        return $stmt->fetchColumn() !== false;
+        return array_values($stmt->fetchAll(PDO::FETCH_COLUMN));
     }
 
-    public function isUploadInUse(string $publicPath): bool
+    public function uploadsInUse(array $paths): array
     {
-        $stmt = $this->pdo->prepare(self::UPLOAD_IN_USE);
-        $stmt->bindValue(':path', $publicPath);
-        $stmt->bindValue(':path2', $publicPath);
+        if ($paths === []) {
+            return [];
+        }
+        $stmt = $this->pdo->prepare(self::UPLOADS_IN_USE);
+        $stmt->bindValue(':paths', json_encode(array_values($paths), JSON_THROW_ON_ERROR));
         $stmt->execute();
 
-        return $stmt->fetchColumn() !== false;
+        return array_values($stmt->fetchAll(PDO::FETCH_COLUMN));
     }
 
     public function create(array $data): string
