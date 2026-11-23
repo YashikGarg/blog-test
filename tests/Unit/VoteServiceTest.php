@@ -17,17 +17,33 @@ use Symfony\Component\Cache\Psr16Cache;
 #[CoversClass(VoteService::class)]
 final class VoteServiceTest extends TestCase
 {
-    public function test_vote_returns_new_state_and_caches_the_count(): void
+    public function test_changed_vote_updates_the_cached_count_without_a_query(): void
+    {
+        $votes = $this->createMock(VoteRepositoryInterface::class);
+        $votes->method('set')->willReturn(true);
+        $votes->expects(self::never())->method('count');
+        $cache = new Psr16Cache(new ArrayAdapter());
+        $cache->set('votes.post-1', 5);
+        $service = new VoteService($votes, $cache, 300);
+
+        $result = $service->vote('post-1', 'user-1', '0');
+
+        self::assertSame(['voted' => false, 'changed' => true], $result);
+        self::assertSame(4, $cache->get('votes.post-1'));
+    }
+
+    public function test_repeat_vote_keeps_the_cached_count(): void
     {
         $votes = $this->createStub(VoteRepositoryInterface::class);
-        $votes->method('set')->willReturn(['voted' => true, 'count' => 3]);
+        $votes->method('set')->willReturn(false);
         $cache = new Psr16Cache(new ArrayAdapter());
+        $cache->set('votes.post-1', 5);
         $service = new VoteService($votes, $cache, 300);
 
         $result = $service->vote('post-1', 'user-1', '1');
 
-        self::assertSame(['voted' => true, 'count' => 3], $result);
-        self::assertSame(3, $cache->get('votes.post-1'));
+        self::assertSame(['voted' => true, 'changed' => false], $result);
+        self::assertSame(5, $cache->get('votes.post-1'));
     }
 
     public function test_vote_throws_for_unpublished_post(): void

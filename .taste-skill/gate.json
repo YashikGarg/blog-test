@@ -6,7 +6,7 @@
  "status": "done",
  "history": [
   {
-   "at": "2026-11-21T11:34:50.379Z",
+   "at": "2026-11-23T12:20:21.846Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -14,7 +14,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-21T11:42:16.528Z",
+   "at": "2026-11-23T12:22:38.990Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -22,7 +22,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-21T11:45:21.294Z",
+   "at": "2026-11-23T12:23:12.743Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -30,7 +30,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-21T19:32:25.583Z",
+   "at": "2026-11-23T12:45:12.812Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -38,7 +38,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-21T19:35:17.161Z",
+   "at": "2026-11-23T12:46:03.311Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -46,7 +46,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T09:37:18.254Z",
+   "at": "2026-11-23T12:48:12.151Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -54,7 +54,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T09:40:47.857Z",
+   "at": "2026-11-23T12:49:19.333Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -62,7 +62,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T09:42:26.248Z",
+   "at": "2026-11-23T12:52:36.063Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -70,7 +70,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T10:11:52.532Z",
+   "at": "2026-11-23T13:06:40.673Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -78,7 +78,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T10:20:27.894Z",
+   "at": "2026-11-23T13:15:03.884Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -86,7 +86,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T10:27:37.166Z",
+   "at": "2026-11-23T13:16:23.662Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -94,7 +94,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T10:53:30.225Z",
+   "at": "2026-11-23T13:20:25.329Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -102,7 +102,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T10:59:47.862Z",
+   "at": "2026-11-23T13:22:11.217Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -110,7 +110,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T11:06:11.781Z",
+   "at": "2026-11-23T13:23:56.924Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -118,7 +118,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T11:09:12.414Z",
+   "at": "2026-11-23T13:24:26.162Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -126,7 +126,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T11:11:58.638Z",
+   "at": "2026-11-23T13:26:22.087Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -134,7 +134,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T11:13:58.854Z",
+   "at": "2026-11-23T13:27:58.347Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -142,7 +142,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T11:25:16.524Z",
+   "at": "2026-11-23T13:31:14.720Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -150,7 +150,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T12:04:46.020Z",
+   "at": "2026-11-23T13:31:53.077Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",
@@ -158,7 +158,7 @@
    "stopHookActive": false
   },
   {
-   "at": "2026-11-23T12:07:07.020Z",
+   "at": "2026-11-23T13:32:59.635Z",
    "mode": "hook",
    "host": "claude",
    "decision": "allow",

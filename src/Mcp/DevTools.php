@@ -32,7 +32,7 @@ final readonly class DevTools
     /**
      * EXPLAIN one of the named repository queries.
      *
-     * @param string $name one of: list_published, list_published_after_cursor, search, admin_list, post_by_slug, post_by_id, slug_family, uploads_in_use, comment_ids_page, comment_ids_page_after_cursor, comments_by_ids, vote_count, vote_published_count, has_voted, login_lookup
+     * @param string $name one of: list_published, list_published_after_cursor, search, admin_list, post_by_slug, post_by_id, slug_family, uploads_in_use, comment_ids_page, comment_ids_page_after_cursor, comments_by_ids, vote_count, vote_devote, post_is_published, has_voted, login_lookup
      */
     public function explainQuery(string $name): array
     {
@@ -65,7 +65,8 @@ final readonly class DevTools
             ],
             'comments_by_ids' => [PdoCommentRepository::BY_IDS . '(UUID_TO_BIN(:id0), UUID_TO_BIN(:id1))', ['id0' => $postId, 'id1' => $userId]],
             'vote_count' => [PdoVoteRepository::COUNT, ['p' => $postId]],
-            'vote_published_count' => [PdoVoteRepository::PUBLISHED_COUNT, ['p' => $postId]],
+            'vote_devote' => [PdoVoteRepository::DEVOTE, ['p' => $postId, 'u' => $userId]],
+            'post_is_published' => [PdoVoteRepository::IS_PUBLISHED, ['p' => $postId]],
             'has_voted' => [PdoVoteRepository::HAS_VOTED, ['p' => $postId, 'u' => $userId]],
             'login_lookup' => [PdoLoginAttemptRepository::LOOKUP, ['k' => sha1('probe')]],
         ];

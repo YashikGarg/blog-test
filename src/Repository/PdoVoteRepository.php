@@ -10,14 +10,18 @@ use PDOException;
 final readonly class PdoVoteRepository implements VoteRepositoryInterface
 {
     public const HAS_VOTED = "SELECT 1 FROM post_votes WHERE post_id = UUID_TO_BIN(:p) AND user_id = UUID_TO_BIN(:u) AND status = 'active'";
-    public const UPSERT = "INSERT INTO post_votes (post_id, user_id, status)
-        SELECT p.id, UUID_TO_BIN(:u), :w FROM posts p WHERE p.id = UUID_TO_BIN(:p) AND p.status = 'published'
-        ON DUPLICATE KEY UPDATE status = :w2";
-    public const COUNT_UPDATE = 'UPDATE post_vote_counts SET upvotes = LAST_INSERT_ID(upvotes + :d) WHERE post_id = UUID_TO_BIN(:p)';
+    /** Upvote: insert the row, or switch removed -> active. rowCount 1 or 2 = changed, 0 = already active or post not published. */
+    public const UPVOTE = "INSERT INTO post_votes (post_id, user_id, status)
+        SELECT p.id, UUID_TO_BIN(:u), 'active' FROM posts p WHERE p.id = UUID_TO_BIN(:p) AND p.status = 'published'
+        ON DUPLICATE KEY UPDATE status = 'active'";
+    /** Devote: only active -> removed; never inserts a row. rowCount 1 = changed, 0 = no vote, already removed or post not published. */
+    public const DEVOTE = "UPDATE post_votes v JOIN posts p ON p.id = v.post_id AND p.status = 'published'
+        SET v.status = 'removed'
+        WHERE v.post_id = UUID_TO_BIN(:p) AND v.user_id = UUID_TO_BIN(:u) AND v.status = 'active'";
+    public const COUNT_UPDATE = 'UPDATE post_vote_counts SET upvotes = upvotes + :d WHERE post_id = UUID_TO_BIN(:p)';
     public const COUNT = 'SELECT upvotes FROM post_vote_counts WHERE post_id = UUID_TO_BIN(:p)';
-    /** Only when the upsert changed nothing: a repeat click (row found, so count) or a post that is not published (no row, so 404). */
-    public const PUBLISHED_COUNT = "SELECT c.upvotes FROM post_vote_counts c JOIN posts p ON p.id = c.post_id AND p.status = 'published'
-        WHERE c.post_id = UUID_TO_BIN(:p)";
+    /** Only when nothing changed: tells a repeat click (published) from a post that is not published (404). */
+    public const IS_PUBLISHED = "SELECT 1 FROM posts WHERE id = UUID_TO_BIN(:p) AND status = 'published'";
 
     public function __construct(private PDO $pdo)
     {
@@ -31,9 +35,9 @@ final readonly class PdoVoteRepository implements VoteRepositoryInterface
         return $stmt->fetchColumn() !== false;
     }
 
-    public function set(string $postId, string $userId, bool $wanted): ?array
+    public function set(string $postId, string $userId, bool $wanted): ?bool
     {
-        // One short transaction, fixed lock order (vote row first, then counter). On a deadlock, retry once.
+        // On a deadlock, retry once.
         try {
             return $this->write($postId, $userId, $wanted);
         } catch (PDOException $e) {
@@ -54,31 +58,22 @@ final readonly class PdoVoteRepository implements VoteRepositoryInterface
         return $count === false ? 0 : (int) $count;
     }
 
-    /** @return array{voted: bool, count: int}|null */
-    private function write(string $postId, string $userId, bool $wanted): ?array
+    /** One short transaction: the vote row, then the counter ±1 only if the vote really changed (fixed lock order). */
+    private function write(string $postId, string $userId, bool $wanted): ?bool
     {
-        $status = $wanted ? 'active' : 'removed';
-        $count = null;
         $this->pdo->beginTransaction();
         try {
-            $upsert = $this->pdo->prepare(self::UPSERT);
-            $upsert->execute(['u' => $userId, 'w' => $status, 'p' => $postId, 'w2' => $status]);
-            // rowCount: 1 = new row, 2 = status changed, 0 = nothing changed or post not published.
-            $delta = match ($upsert->rowCount()) {
-                1 => $wanted ? 1 : 0,
-                2 => $wanted ? 1 : -1,
-                default => 0,
-            };
-            if ($delta !== 0) {
+            $vote = $this->pdo->prepare($wanted ? self::UPVOTE : self::DEVOTE);
+            $vote->execute(['u' => $userId, 'p' => $postId]);
+            $changed = $vote->rowCount() > 0;
+            if ($changed) {
                 $update = $this->pdo->prepare(self::COUNT_UPDATE);
-                $update->bindValue('d', $delta, PDO::PARAM_INT);
+                $update->bindValue('d', $wanted ? 1 : -1, PDO::PARAM_INT);
                 $update->bindValue('p', $postId);
                 $update->execute();
                 if ($update->rowCount() !== 1) {
                     throw new \RuntimeException('Vote counter row is missing');
                 }
-                // Read it HERE: LAST_INSERT_ID(upvotes + d) is the new count, but the client resets lastInsertId() to 0 after COMMIT.
-                $count = (int) $this->pdo->lastInsertId();
             }
             $this->pdo->commit();
         } catch (\Throwable $e) {
@@ -87,14 +82,13 @@ final readonly class PdoVoteRepository implements VoteRepositoryInterface
             }
             throw $e;
         }
-        if ($count !== null) {
-            return ['voted' => $wanted, 'count' => $count];
+        if ($changed) {
+            return true;
         }
-        $stmt = $this->pdo->prepare(self::PUBLISHED_COUNT); // rare path only
+        $stmt = $this->pdo->prepare(self::IS_PUBLISHED); // rare path: a repeat click, or a post that is not published
         $stmt->execute(['p' => $postId]);
-        $count = $stmt->fetchColumn();
 
-        return $count === false ? null : ['voted' => $wanted, 'count' => (int) $count];
+        return $stmt->fetchColumn() === false ? null : false;
     }
 
     private function isDeadlock(PDOException $e): bool

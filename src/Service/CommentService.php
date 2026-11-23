@@ -13,7 +13,7 @@ use App\Repository\CommentRepositoryInterface;
 use Psr\SimpleCache\CacheInterface;
 use Symfony\Component\Uid\Uuid;
 
-/** Full comment CRUD. Ownership is enforced here, never only in the view. Every method returns a Comment (with its post slug). */
+/** Full comment CRUD. Ownership is enforced here, never only in the view. add() and update() return the Comment (with its post slug); delete() returns nothing. */
 final readonly class CommentService
 {
     public function __construct(

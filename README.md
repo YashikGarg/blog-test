@@ -15,4 +15,6 @@ composer serve                       # http://localhost:8000
 
 Other commands: `composer test` (PHPUnit, unit), `npm run typecheck` (strict TS), `composer db:down`.
 
+On every deploy, clear the app cache: `rm -rf var/cache/app/*` (with APCu in prod, restart PHP-FPM). The cache holds serialized `Post` and `Comment` objects, which can read back broken after their classes change.
+
 The admin logs in at `/login` with `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Users register at `/register`.

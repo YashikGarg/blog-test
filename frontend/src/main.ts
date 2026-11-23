@@ -224,8 +224,10 @@ function updateLoadMore(nextCursor: string | null, q: string): void {
 const handlers: Record<string, Handler> = {
   async vote(form, body) {
     const r = await send(form.action, { method: 'POST', body }, isVoteResult);
+    // The server sends no count: add or remove this user's vote. Other users' votes show on the next page load.
     const count = form.querySelector('[data-vote-count]');
-    if (count) count.textContent = String(r.count);
+    const shown = Number.parseInt(count?.textContent ?? '', 10);
+    if (count && r.changed && Number.isFinite(shown)) count.textContent = String(Math.max(0, shown + (r.voted ? 1 : -1)));
     form.querySelector('button[type="submit"]')?.setAttribute('aria-pressed', String(r.voted));
     const wanted = form.querySelector<HTMLInputElement>('[data-vote-wanted]');
     if (wanted) wanted.value = r.voted ? '0' : '1';

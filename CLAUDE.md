@@ -381,7 +381,7 @@ Every FK is `ON DELETE RESTRICT`. Nothing is ever hard-deleted.
 | GET/POST | `/login`, `/register` | AuthController | - (guest) |
 | POST | `/logout` | AuthController::logout | user |
 | POST | `/posts/{id:uuid}/comments` | CommentController::store | user |
-| POST | `/posts/{id:uuid}/vote` | VoteController::vote (body `voted=1\|0`: the state the user wants, so a double click cannot cancel the vote; JSON, or redirect if no JS) | user |
+| POST | `/posts/{id:uuid}/vote` | VoteController::vote (body `voted=1\|0`: the state the user wants, so a double click cannot cancel the vote; JSON `{voted, changed}`, no count: the page adds or removes 1 itself; or redirect if no JS) | user |
 | POST | `/comments/{id:uuid}` | CommentController::update (the service checks owner) | user |
 | POST | `/comments/{id:uuid}/delete` | CommentController::destroy: **soft delete** (the service checks owner or admin) | user |
 | GET | `/admin` (`?before=<uuid>`; keyset by id) | AdminPostController::index | admin |
@@ -403,7 +403,7 @@ All keys go through the PSR-16 `CacheInterface` (filesystem locally, APCu in pro
 |---|---|---|---|
 | `post.{slug}` | `['post' => Post, 'html' => string]` | first published read | post update or delete (the service knows `$existing->slug`) |
 | `posts.home` | the `listPublished(null, null)` array | first read, TTL `CACHE_COUNT_TTL` | any post create, update or delete |
-| `votes.{postId}` | int count | after every vote (the DB's count, never an increment), TTL `CACHE_COUNT_TTL` | overwritten by the next vote |
+| `votes.{postId}` | int count | on a post page read (one primary-key query on a miss), TTL `CACHE_COUNT_TTL` | **updated in place ±1** when a vote changes the count (no DB read; not atomic, so it can be off by one until the TTL, accepted) |
 | `comment.{id}` | `Comment` | after add/edit, and on a cache miss in a list | **deleted** on comment delete; overwritten on edit |
 | `md.{postId}.{updatedAtTimestamp}` | rendered markdown HTML (`CachedMarkdownRenderer`) | on a render | never (an edit makes a new key) |
 
@@ -423,7 +423,10 @@ npm run build                        # esbuild: main.ts → public/assets/app.js
 npm run typecheck                    # tsc --noEmit (strict)
 composer test                        # phpunit tests/Unit
 composer serve                       # php -S localhost:8000 -t public public/index.php
+rm -rf var/cache/app/*               # on every deploy (APCu in prod: restart PHP-FPM instead)
 ```
+
+The cache stores serialized `Post` and `Comment` objects (change set 004). An entry written by the old code can read back broken once a deploy changes those classes, so clear the app cache on every deploy.
 
 ## B9. Decision log (append; newest last)
 
@@ -606,3 +609,26 @@ composer serve                       # php -S localhost:8000 -t public public/in
     - **EXPLAIN** (run through `DevTools` directly; the MCP server must be reconnected with `/mcp` to see the new names): `comment_ids_page` and `comment_ids_page_after_cursor` use `idx_comments_post_status_created` with a backward, index-only scan and no filesort; `comments_by_ids` is `range PRIMARY`; `slug_family` is `range uq_posts_slug`; `vote_count` and `vote_published_count` are `const PRIMARY`; `uploads_in_use` is the accepted hash-join plan. The list queries keep their index plans on a 300-post dataset (a 2-user dataset shows the known tiny-table artifact). `verify_constraints` 15/15; `verify_vote_counts` `[]`.
     - **Live smoke test over HTTP (40 checks)** and **browser test at 390 px (13 checks, 0 page errors):** votes on, on again, off (+1, unchanged, −1; a double click votes once and does not cancel), a vote on a draft gives 404, `voted` missing or invalid gives 422, the counter equals the real active votes; comment add, edit (also with the same text), delete (owner or admin; non-owner 403; repeat 404) and a deleted comment never reappears; 35 comments give 30 newest first plus "Older comments" with 5 more; an edit to a post shows at once; a save with no changes keeps `updated_at`; a register with a duplicate email gives 422 from the UNIQUE key. **Query counts, warm cache:** a guest post page 3 → 1 SELECT, home page 1 → 0. All test rows and cache files were removed, and the user's data was identical before and after (2 users, 3 posts, 2 comments, 1 vote).
   - **Deviation from the change set:** `PdoVoteRepository::write()` reads `lastInsertId()` right after the counter `UPDATE`, **before** `COMMIT`. The doc's code read it after `COMMIT`, and PDO returns 0 then (proved: 1 inside the transaction, 0 after the commit), so the vote response showed count 0 although the stored count was right. The SQL in the doc's §6 was verified, but not the PDO call that follows the commit.
+- 2026-11-23 (post-004 review, Opus):
+  - **Checks:** gates clean (33 tests); MCP `verify_constraints` 15/15, `verify_vote_counts` `[]`, `list_routes` (vote → `VoteController::vote`); `explain_query` on all 7 new names matches the doc. Skills run: `acc:detect-n-plus-one`, `acc:check-caching-strategy`, `acc:check-sql-injection`, `acc:check-authorization`, `acc:find-race-conditions`, `acc:check-test-quality`.
+  - **Applied:** the §B8 and README note to clear `var/cache/app` on every deploy, and a corrected `CommentService` docblock.
+  - **Accepted by the user (known gap):** a reader that loaded the old post or comment just before an admin save can write it back into the cache after the save cleared it. It then stays stale until `CACHE_TTL` expires. The user's reasoning: comments and votes don't depend on the cached post body, and an unpublished or deleted post is refused by the conditional SQL in any case.
+  - **Not applied:** keying the markdown cache on `sha1(body_md)` (deferred item 1 remains).
+- 2026-11-23 (user request; done): **simpler vote write**. The upvote and the devote are separate statements, and the counter moves ±1 only when the vote row really changed. No `LAST_INSERT_ID` trick and no count in the response.
+  - `UPVOTE`: `INSERT … SELECT … WHERE published ON DUPLICATE KEY UPDATE status = 'active'`. `DEVOTE`: `UPDATE post_votes v JOIN posts p … SET status = 'removed' WHERE … status = 'active'`, which never inserts a row, so a user who never voted leaves no `removed` row.
+  - A normal click is **2 queries** (the vote row, then the counter ±1). A repeat click or an unpublished post is 1 write that changes 0 rows, plus `IS_PUBLISHED`: no row gives a 404.
+  - The JSON is `{voted, changed}`, and `main.ts` adds or removes 1 on the shown count. Other users' votes appear on the next page load (eventual consistency, user accepted). `votes.{postId}` is deleted on a change and rebuilt by the next page read.
+  - **Verified on Docker MySQL 8.4:**
+    - rolled-back probe: a devote by a user who never voted changed 0 rows and inserted nothing; up 1, up again 0, down 1, down again 0, up after down 2; up and down on a draft 0; `IS_PUBLISHED` returned `1` for a published post and `false` for a draft; EXPLAIN `const PRIMARY` on both DEVOTE tables;
+    - the real `PdoVoteRepository::set()` committed: count 1 → 1, 2, 2, 1, 1, 2, 1 across down, up, up, down, down, up, down; an unknown post gave `null`; the probe user was then removed as root.
+    - `DevTools` called directly (the MCP session had expired): `verify_vote_counts` `[]`, `verify_constraints` 15/15; `post_is_published` and `vote_count` `const PRIMARY`; `vote_devote` "no matching row in const table" for the sample user, which is a primary-key lookup.
+  - Tests 33 → 34 (a changed vote clears the cached count; a repeat vote keeps it); typecheck and build clean. The `DevTools` whitelist replaces `vote_published_count` with `vote_devote` and `post_is_published`.
+  - **Re-checked after `/mcp` reconnected:**
+    - **MCP:** `verify_vote_counts` `[]` (also after the race test); `verify_constraints` 15/15; `list_routes` shows vote → `VoteController::vote`; `explain_query` gives `post_is_published` and `vote_count` `const PRIMARY`, and `vote_devote` "no matching row in const table" (a primary-key lookup for a user with no vote).
+    - **`acc:find-race-conditions`:** two live connections, the same user upvoting at once. B waited on A's row lock (1205 with a 1 s timeout), and after A's commit B's upvote returned `false` (no change), so the count went up exactly +1. The counter only moves through `SET upvotes = upvotes + :d`, never read → change → write. Accepted: a page read that misses the cache can store a count from before a concurrent vote, stale for at most `CACHE_COUNT_TTL`.
+    - **`acc:check-sql-injection`:** the 5 vote statements are static constants, every value is bound (`:d` as `PARAM_INT`), and `voted` is accepted only as `'1'` or `'0'` through a strict `match`.
+  - **Process gap, fixed after the user flagged it:** this edit was made before invoking the A2 skills `mysql-patterns` and `modern-web-guidance` (an A2 violation). Both ran afterwards:
+    - **`mysql-patterns`** (MySQL 8.4): constant values in `ON DUPLICATE KEY UPDATE`, so no `VALUES()` or row alias is needed. Every lookup is on the primary key, and the transaction is short. Lock order is the same on every path: `posts` (shared, read by `INSERT … SELECT` / `UPDATE … JOIN`) → `post_votes` → `post_vote_counts`. The admin post update takes only `posts`, so there's no lock cycle; the deadlock retry stays as a backstop.
+    - **`modern-web-guidance`** (`accessibility` guide): `aria-pressed` carries the toggle state, the label "Upvote N" doesn't repeat that state, and the result is announced through the existing `role="status"` line (polite). Pre-existing and left as is: `run()` sets `disabled` on the submit button while the request runs, and the guide notes that `disabled` drops the element from the focus order.
+    - **`acc:check-test-quality`** on the 2 changed vote tests: Arrange/Act/Assert, one behaviour each, 1 test double plus a real `ArrayAdapter` cache.
+  - **Correction (user):** a changed vote now **updates** `votes.{postId}` by ±1 in place instead of deleting it, so a vote never causes a DB read. A missing key is left absent, and the next page read loads it. The cache read → ±1 → write isn't atomic, so concurrent votes can leave it off by one until `CACHE_COUNT_TTL` expires (user accepted); the DB counter stays exact. Skill used first: `acc:caching-strategies-knowledge` ("Counters/stats … Update on write"). Test: `test_changed_vote_updates_the_cached_count_without_a_query` (5 → 4 on a devote, and the repository's `count` is never called).

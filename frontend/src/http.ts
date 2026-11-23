@@ -22,7 +22,7 @@ export interface PostCard {
   upvotes: number;
 }
 
-export interface VoteResult { ok: true; voted: boolean; count: number }
+export interface VoteResult { ok: true; voted: boolean; changed: boolean }
 export interface CommentResult { ok: true; comment: CommentData }
 export interface CommentPage { ok: true; comments: CommentData[]; nextCommentCursor: string | null }
 export interface Deleted { ok: true; id: string }
@@ -74,7 +74,7 @@ const isPostCard = (v: unknown): v is PostCard =>
   typeof v['upvotes'] === 'number';
 
 export const isVoteResult: Guard<VoteResult> = (v): v is VoteResult =>
-  isRecord(v) && v['ok'] === true && typeof v['voted'] === 'boolean' && typeof v['count'] === 'number';
+  isRecord(v) && v['ok'] === true && typeof v['voted'] === 'boolean' && typeof v['changed'] === 'boolean';
 
 export const isCommentResult: Guard<CommentResult> = (v): v is CommentResult =>
   isRecord(v) && v['ok'] === true && isCommentData(v['comment']);

@@ -18,7 +18,10 @@ final readonly class VoteService
     ) {
     }
 
-    /** @return array{voted: bool, count: int} */
+    /**
+     * No count is returned: the page adds or removes 1 itself when the vote changed.
+     * @return array{voted: bool, changed: bool}
+     */
     public function vote(string $postId, string $userId, string $wanted): array
     {
         $flag = match ($wanted) {
@@ -26,10 +29,17 @@ final readonly class VoteService
             '0' => false,
             default => throw new ValidationException(['voted' => 'Invalid vote']),
         };
-        $result = $this->votes->set($postId, $userId, $flag) ?? throw new NotFoundException('Post not found');
-        $this->cache->set(self::key($postId), $result['count'], $this->countTtl); // the DB's count, never an increment
+        $changed = $this->votes->set($postId, $userId, $flag) ?? throw new NotFoundException('Post not found');
+        if ($changed) {
+            // Update the cached count in place (no DB read). Not atomic: two votes at the same moment can leave it
+            // off by one until the TTL expires (accepted). Nothing cached yet: the next count() loads it.
+            $cached = $this->cache->get(self::key($postId));
+            if (is_int($cached)) {
+                $this->cache->set(self::key($postId), max(0, $cached + ($flag ? 1 : -1)), $this->countTtl);
+            }
+        }
 
-        return $result;
+        return ['voted' => $flag, 'changed' => $changed];
     }
 
     public function count(string $postId): int
